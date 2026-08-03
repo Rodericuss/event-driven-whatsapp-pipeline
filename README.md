@@ -1,100 +1,100 @@
-# WhatsApp Marketplace Importer
+# WhatsApp Listing Pipeline
 
-Automação orientada a eventos que transforma sequências de texto e imagens do
-WhatsApp em anúncios estruturados, mantendo uma pessoa no controle da
-publicação.
+An event-driven automation pipeline that turns sequences of WhatsApp text and
+images into structured listings while keeping a human in control of every
+publication.
 
-![Diagrama do pipeline orientado a eventos](docs/assets/architecture-pipeline.png)
+![Event-driven pipeline architecture](docs/assets/architecture-pipeline.png)
 
-> A IA propõe. Regras determinísticas validam. Uma pessoa aprova.
+> AI proposes. Deterministic rules validate. A human approves.
 
-## O que este projeto resolve
+## What this project solves
 
-Em grupos de compra e venda, um lote costuma chegar assim:
+Marketplace groups commonly receive batches in this format:
 
 ```text
-texto do anúncio A
-fotos do anúncio A
-texto do anúncio B
-fotos do anúncio B
+listing A text
+listing A photos
+listing B text
+listing B photos
 ...
 ```
 
-No WhatsApp, porém, texto, fotos e vídeos são eventos independentes. Callbacks
-podem chegar atrasados ou fora de ordem, vários anúncios podem ser enviados ao
-mesmo tempo e uma falha de rede pode deixar a entrega em estado incerto.
+WhatsApp delivers text, photos, and videos as independent events. Callbacks may
+arrive late or out of order, multiple listings may be submitted concurrently,
+and network failures may leave delivery status uncertain.
 
-Este projeto:
+This project:
 
-- captura somente uma origem explicitamente autorizada;
-- mantém eventos em staging SQLite durante uma janela de estabilidade;
-- reordena mensagens pelo timestamp original;
-- separa candidatos com uma máquina de estados;
-- anexa as imagens posteriores ao candidato correto;
-- extrai título, ano, preço, descrição, categoria e tipo com Ollama;
-- valida o JSON com schema e regras de negócio;
-- pergunta no privado quando falta uma informação recuperável;
-- envia um card privado com a quantidade de imagens;
-- publica somente depois de uma aprovação individual;
-- serializa os álbuns para evitar mistura de fotos;
-- impede duplicações com hashes, IDs, locks e checkpoints.
+- accepts events from one explicitly authorized source group;
+- stages events in SQLite during a stability window;
+- restores the original timestamp order;
+- separates candidates through a state machine;
+- attaches subsequent images to the correct candidate;
+- extracts title, year, price, description, category, and type with Ollama;
+- validates structured output with JSON Schema and business rules;
+- asks for clarification in a private chat when recoverable data is missing;
+- sends a private review card that includes the image count;
+- publishes only after individual human approval;
+- serializes album delivery to prevent images from being mixed;
+- prevents duplicates with hashes, IDs, locks, and checkpoints.
 
-## Segurança por padrão
+## Secure by default
 
-O repositório público não contém telefones, JIDs, grupos, tokens, anúncios ou
-mídias reais. A configuração de exemplo começa com:
+The public repository contains no real phone numbers, JIDs, group names,
+tokens, listings, or media. Its example configuration starts with:
 
 - `DRY_RUN=true`;
-- entrada em grupo desabilitada;
-- publicação pessoal e em grupo desabilitadas;
-- marketplace desabilitado;
-- destinos e allowlists vazios.
+- source-group intake disabled;
+- personal and group publication disabled;
+- marketplace integration disabled;
+- empty destinations and allowlists.
 
-Mensagens do WhatsApp são tratadas como dados não confiáveis. A IA nunca
-autoriza publicação, e uma reação no grupo de origem nunca vale como aprovação.
+All WhatsApp content is treated as untrusted data. AI output can never authorize
+publication, and a reaction in the source group never counts as approval.
 
-## Arquitetura
+## Architecture
 
 ```text
-Grupo de origem
+Source group
       ↓
 OpenClaw / WhatsApp
       ↓
-SQLite staging (janela de 8 segundos)
+SQLite staging (8-second stability window)
       ↓
-Ordenação + máquina de estados
+Ordering + state machine
       ↓
-Candidatos independentes
+Independent candidates
       ↓
-Ollama → JSON estruturado
+Ollama → structured JSON
       ↓
-JSON Schema + regras determinísticas
+JSON Schema + deterministic rules
       ↓
-Card no chat privado
+Private review card
       ↓
-👍 aprova | 👎 cancela | dúvida pede esclarecimento
+👍 approve | 👎 cancel | ambiguity requests clarification
       ↓
-Fila serializada → grupo de publicação
+Serialized queue → publication group
 ```
 
-Detalhes sobre concorrência, idempotência e fronteiras de confiança estão em
+Concurrency, idempotency, and trust boundaries are described in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Requisitos
+## Requirements
 
 - Linux;
-- Python 3.11 ou superior;
-- Node.js compatível com sua versão do OpenClaw;
-- OpenClaw com o canal WhatsApp configurado;
-- Ollama com um modelo que produza JSON estruturado;
-- SQLite 3 para inspeção operacional opcional.
+- Python 3.11 or newer;
+- a Node.js version compatible with your OpenClaw release;
+- OpenClaw with the WhatsApp channel configured;
+- Ollama with a model capable of structured JSON output;
+- SQLite 3 for optional operational inspection.
 
-O fluxo de texto não depende de uma API externa de IA. O modelo roda no Ollama
-configurado pela instalação.
+The text extraction flow does not require an external AI API. It uses the model
+served by the configured Ollama installation.
 
-## Instalação rápida
+## Quick start
 
-Clone o projeto e prepare a configuração local:
+Clone the repository and prepare a private local configuration:
 
 ```bash
 git clone https://github.com/Rodericuss/auto-publication-romildonegocios.git
@@ -102,43 +102,44 @@ cd auto-publication-romildonegocios
 scripts/bootstrap-local-config
 ```
 
-O bootstrap:
+The bootstrap command:
 
-1. cria `.env` a partir de `.env.example`;
-2. cria `config/settings.local.json` a partir do exemplo seguro;
-3. aplica permissão `600` aos arquivos privados;
-4. cria `config/settings.json -> settings.local.json` para compatibilidade;
-5. nunca sobrescreve silenciosamente uma configuração existente.
+1. creates `.env` from `.env.example`;
+2. creates `config/settings.local.json` from the secure public example;
+3. applies mode `600` to private files;
+4. creates `config/settings.json -> settings.local.json` for compatibility;
+5. never silently overwrites existing configuration.
 
-Valide os defaults antes de editar:
+Validate the defaults before editing them:
 
 ```bash
 scripts/validate-local-config
 scripts/validate-local-config --public-example
 ```
 
-## Onde configurar cada coisa
+## Configuration layers
 
-Há duas camadas locais, ambas ignoradas pelo Git:
+The application uses two local files. Both are excluded from Git:
 
-| Arquivo | Uso |
+| File | Purpose |
 |---|---|
-| `.env` | endpoints, modelo, flags, chats, grupos e token |
-| `config/settings.local.json` | catálogo de keywords e configuração estruturada |
+| `.env` | Endpoints, model, feature flags, chats, groups, and token |
+| `config/settings.local.json` | Keyword catalog and structured configuration |
 
-As variáveis de ambiente sobrescrevem o JSON. A precedência dos arquivos é:
+Environment variables override JSON values. Configuration files are resolved in
+this order:
 
 1. `IMPORTER_SETTINGS_PATH`;
 2. `config/settings.local.json`;
-3. `config/settings.json`, fallback legado;
-4. `config/settings.example.json`, sempre seguro e sem destinos.
+3. `config/settings.json`, the legacy compatibility fallback;
+4. `config/settings.example.json`, always secure and destination-free.
 
-O carregador lê `.env`, mas não substitui uma variável que já exista no processo
-ou no serviço systemd.
+The loader reads `.env` without replacing variables already present in the
+process or systemd service environment.
 
-## Configurando a IA
+## Configuring AI extraction
 
-O caminho operacional atual suporta modelos servidos pelo Ollama. Configure em
+The current extraction path supports models served by Ollama. Configure it in
 `.env`:
 
 ```dotenv
@@ -148,62 +149,64 @@ OLLAMA_EXTRACTION_MODEL=qwen3-agent
 OLLAMA_TIMEOUT_SECONDS=120
 ```
 
-### Parâmetros disponíveis
+### Available AI parameters
 
-| Variável | Exemplo | Efeito |
+| Variable | Example | Effect |
 |---|---|---|
-| `OLLAMA_PROVIDER` | `ollama` | Provedor suportado pelo extrator atual |
-| `OLLAMA_ENDPOINT` | `http://127.0.0.1:11434` | Servidor Ollama utilizado |
-| `OLLAMA_EXTRACTION_MODEL` | `qwen3-agent` | Modelo textual carregado pelo Ollama |
-| `OLLAMA_TIMEOUT_SECONDS` | `120` | Limite de espera por extração |
-| `REDACTED_TERMS` | `Empresa Exemplo,Vendedor Exemplo` | Termos removidos e rejeitados na descrição |
+| `OLLAMA_PROVIDER` | `ollama` | Provider supported by the current extractor |
+| `OLLAMA_ENDPOINT` | `http://127.0.0.1:11434` | Ollama server used for extraction |
+| `OLLAMA_EXTRACTION_MODEL` | `qwen3-agent` | Text model loaded through Ollama |
+| `OLLAMA_TIMEOUT_SECONDS` | `120` | Maximum extraction wait time |
+| `REDACTED_TERMS` | `Example Company,Example Seller` | Terms removed from and rejected in descriptions |
 
-Para trocar de modelo:
+To change the model safely:
 
-1. instale ou baixe o modelo no Ollama;
-2. altere apenas `OLLAMA_EXTRACTION_MODEL`;
-3. execute os testes;
-4. envie anúncios sintéticos em modo seguro;
-5. verifique preços, anos, categoria e tipo antes de habilitar um destino real.
+1. install or pull the model in Ollama;
+2. change only `OLLAMA_EXTRACTION_MODEL`;
+3. run the automated tests;
+4. submit synthetic listings with all write flags disabled;
+5. inspect prices, years, categories, and types before enabling a real target.
 
-O extrator usa temperatura zero, seed fixa e JSON Schema para reduzir variação.
-Mesmo assim, a saída continua sujeita a validações determinísticas e aprovação
-humana.
+The extractor uses zero temperature, a fixed seed, and JSON Schema to reduce
+variation. Its output is still subject to deterministic validation and human
+approval.
 
-### Keywords de tipos aceitos
+### Accepted item keywords
 
-O filtro inicial usa `item_keywords` em `config/settings.local.json`:
+The initial filter uses `item_keywords` from `config/settings.local.json`:
 
 ```json
 {
   "item_keywords": [
-    "trator",
-    "escavadeira",
-    "retroescavadeira",
-    "caminhão"
+    "tractor",
+    "excavator",
+    "backhoe",
+    "truck"
   ]
 }
 ```
 
-Adicione termos de maneira conservadora. Uma keyword muito genérica aumenta o
-risco de transformar conversas comuns em candidatos.
+Keywords must match the language used in the source group. Add them
+conservatively: generic terms increase the risk of turning ordinary
+conversations into listing candidates.
 
-### Validação visual
+### Visual validation
 
-A validação visual não participa da decisão operacional. Ela foi retirada porque
-modelos visuais rejeitavam fotos corretas de cabine, painel, peças e detalhes
-internos. Somente imagens são anexadas ao anúncio; vídeos são ignorados.
+Visual validation does not participate in the operational decision. It was
+removed because vision models incorrectly rejected valid cabin, dashboard,
+component, and interior-detail photos. Images are attached to listings; videos
+are ignored.
 
-## Configurando chats e grupos
+## Configuring chats and groups
 
-Esta versão trabalha com:
+One installation supports:
 
-- um ou mais chats pessoais explicitamente permitidos;
-- um grupo de origem por instalação;
-- um grupo de publicação, diferente da origem;
-- um chat pessoal responsável por esclarecimentos e aprovações.
+- one or more explicitly allowed personal chats;
+- one source group;
+- one publication group, different from the source;
+- one personal chat for clarification and approval.
 
-Use IDs fictícios nos exemplos e coloque os valores reais somente em `.env`:
+Use synthetic IDs in versioned examples and store real values only in `.env`:
 
 ```dotenv
 OPENCLAW_PERSONAL_CHAT_ID=5500000000000
@@ -211,38 +214,37 @@ OPENCLAW_ALLOWED_CHAT_IDS=5500000000000
 
 SOURCE_GROUP_ENABLED=true
 SOURCE_GROUP_SHADOW_MODE=true
-SOURCE_GROUP_NAME=GRUPO DE ORIGEM
+SOURCE_GROUP_NAME=SOURCE GROUP
 SOURCE_GROUP_JID=100000000000000001@g.us
 APPROVAL_CHAT_ID=5500000000000
 
 GROUP_PUBLICATION_ENABLED=true
 GROUP_PUBLICATION_CHANNEL=whatsapp
-PUBLICATION_GROUP_NAME=GRUPO DE PUBLICAÇÃO
+PUBLICATION_GROUP_NAME=PUBLICATION GROUP
 PUBLICATION_GROUP_JID=100000000000000002@g.us
 ```
 
-Os números acima são sintéticos. Um JID de grupo deve terminar em `@g.us`.
+These numbers are synthetic. A group JID must end in `@g.us`.
 
-### Regras obrigatórias
+### Mandatory rules
 
-- `APPROVAL_CHAT_ID` precisa estar em `OPENCLAW_ALLOWED_CHAT_IDS`;
-- origem e publicação não podem usar o mesmo JID;
-- o nome não autoriza nada: a comparação é feita pelo JID;
-- o grupo de origem não recebe respostas nem reações automáticas;
-- somente o card correspondente no privado pode autorizar um candidato;
-- não use wildcard para aceitar grupos desconhecidos.
+- `APPROVAL_CHAT_ID` must be present in `OPENCLAW_ALLOWED_CHAT_IDS`;
+- source and publication groups must have different JIDs;
+- a group name grants no permission: authorization compares exact JIDs;
+- the source group receives no automated replies or reactions;
+- only the matching private review card can authorize a candidate;
+- never use a wildcard to accept unknown groups.
 
-O comando abaixo falha antes da inicialização quando alguma dessas regras está
-inconsistente:
+This command fails before startup if any of these rules is inconsistent:
 
 ```bash
 scripts/validate-local-config
 ```
 
-### Alinhando a configuração do OpenClaw
+### Aligning the OpenClaw configuration
 
-O `.env` configura o importador, mas o canal WhatsApp do OpenClaw também precisa
-usar a mesma allowlist. A forma mínima esperada é equivalente a:
+The `.env` file configures the importer, but OpenClaw's WhatsApp channel must use
+the same allowlist. The minimum expected structure is equivalent to:
 
 ```json
 {
@@ -265,11 +267,15 @@ usar a mesma allowlist. A forma mínima esperada é equivalente a:
 }
 ```
 
-E o plugin deve receber valores equivalentes a:
+`groupAllowFrom` restricts who may send messages inside an already allowlisted
+group; it does not expand the `groups` allowlist. The importer remains limited
+to the exact source JID.
+
+The OpenClaw plugin must receive equivalent values:
 
 ```json
 {
-  "projectRoot": "/caminho/absoluto/para/o/projeto",
+  "projectRoot": "/absolute/path/to/the/project",
   "allowedChatIds": ["5500000000000"],
   "dryRun": false,
   "groupIntake": {
@@ -281,25 +287,25 @@ E o plugin deve receber valores equivalentes a:
 }
 ```
 
-Todos os valores são exemplos sintéticos. Não versione seu arquivo real do
-OpenClaw nem o estado de autenticação do WhatsApp/Baileys.
+All values above are synthetic. Never commit a real OpenClaw configuration or
+WhatsApp/Baileys authentication state.
 
-### Trocando os grupos com segurança
+### Changing groups safely
 
-1. mantenha o gateway sem ingerir novos eventos durante a alteração;
-2. faça backup de `.env`, `settings.local.json` e da configuração do OpenClaw;
-3. altere origem, aprovação e destino nas duas camadas;
-4. confirme que origem e destino são diferentes;
-5. execute `scripts/validate-local-config`;
-6. execute a suíte automatizada;
-7. teste primeiro com `SOURCE_GROUP_SHADOW_MODE=true`;
-8. só habilite publicação após verificar cards, fotos e checkpoints.
+1. stop new event intake while changing the configuration;
+2. back up `.env`, `settings.local.json`, and the OpenClaw configuration;
+3. update source, approval, and destination values in both layers;
+4. confirm that source and destination are different;
+5. run `scripts/validate-local-config`;
+6. run the automated test suite;
+7. test with `SOURCE_GROUP_SHADOW_MODE=true` first;
+8. enable publication only after reviewing cards, images, and checkpoints.
 
-Para mais de um grupo de origem, prefira instâncias isoladas com configuração e
-staging próprios. Esta implementação restringe deliberadamente cada instância a
-um JID de origem para manter a fronteira de confiança auditável.
+For multiple source groups, prefer isolated instances with independent
+configuration and staging databases. This implementation deliberately limits
+each instance to one source JID so its trust boundary remains auditable.
 
-## Flags de publicação
+## Publication flags
 
 ```dotenv
 DRY_RUN=true
@@ -309,10 +315,11 @@ MARKETPLACE_ENABLED=false
 MARKETPLACE_VISIBLE=false
 ```
 
-Mude uma trava por vez. O modo público de exemplo nunca permite escrita.
+Change one write guard at a time. The public example configuration never allows
+writes.
 
-Quando `MARKETPLACE_ENABLED=false`, um anúncio aprovado pode seguir pelo fluxo
-sem site e sem URL. Para habilitar a API interna, configure:
+When `MARKETPLACE_ENABLED=false`, an approved listing may follow the no-site
+flow without a URL. To enable an internal marketplace API, configure:
 
 ```dotenv
 MARKETPLACE_ENABLED=true
@@ -324,25 +331,25 @@ MARKETPLACE_INTERNAL_API_TOKEN=
 MARKETPLACE_FLY_APP=
 ```
 
-O token deve existir somente no ambiente ou em `.marketplace-token` com modo
-`600`.
+The token must exist only in the environment or in `.marketplace-token` with
+mode `600`.
 
-## Como usar
+## Usage
 
-Depois que o plugin e o canal estiverem configurados:
+After configuring the plugin and WhatsApp channel:
 
-1. envie texto e fotos no grupo de origem;
-2. aguarde a janela de estabilidade;
-3. receba o card no chat privado;
-4. confira título, preço, tipo e quantidade de imagens;
-5. responda à pergunta se houver esclarecimento pendente;
-6. reaja com 👍 para publicar ou 👎 para cancelar.
+1. send listing text and photos to the source group;
+2. wait for the stability window;
+3. receive the review card in the private approval chat;
+4. verify its title, price, type, and image count;
+5. answer the clarification question if one is pending;
+6. react with 👍 to publish or 👎 to cancel.
 
-Um candidato aguardando aprovação não bloqueia os próximos.
+A candidate awaiting approval does not block subsequent candidates.
 
-## Estados e checkpoints
+## States and checkpoints
 
-Cada candidato mantém arquivos privados em `anuncios/pendentes/<uuid>/`, como:
+Each candidate stores private files under `anuncios/pendentes/<uuid>/`, such as:
 
 - `mensagem-original.txt`;
 - `metadata.json`;
@@ -350,15 +357,15 @@ Cada candidato mantém arquivos privados em `anuncios/pendentes/<uuid>/`, como:
 - `clarification.json`;
 - `status.json`;
 - `whatsapp-group-album-publication.json`;
-- fotos e hashes SHA-256.
+- images and SHA-256 hashes.
 
-Uma entrega `complete/sent` nunca deve ser repetida. Uma falha só pode ser
-reexecutada quando o checkpoint comprova ausência de ID de mensagem e falha
-anterior ao aceite pelo provedor.
+A `complete/sent` delivery must never be repeated. A failed delivery may be
+retried only when its checkpoint proves that no message ID was issued and that
+the failure happened before provider acceptance.
 
-## Dados de runtime
+## Runtime data
 
-O Git mantém apenas `.gitkeep` nestas pastas:
+Git tracks only `.gitkeep` files in these directories:
 
 ```text
 anuncios/recebendo/
@@ -368,18 +375,18 @@ anuncios/descartados/
 anuncios/erros/
 ```
 
-Nunca transforme um pacote real em fixture. Os testes usam anúncios, telefones,
-JIDs, imagens e IDs totalmente sintéticos.
+Never convert a real listing package into a fixture. Tests use entirely
+synthetic listings, phone numbers, JIDs, images, and IDs.
 
-## Testes
+## Tests
 
-Execute a suíte completa:
+Run the complete suite:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-Validações adicionais:
+Additional checks:
 
 ```bash
 scripts/validate-local-config --public-example
@@ -388,35 +395,36 @@ node --check openclaw/plugins/whatsapp-marketplace-importer/index.js
 git diff --check
 ```
 
-O checkpoint atual possui 124 testes unitários, de integração, regressão e
-segurança.
+The current checkpoint contains 124 unit, integration, regression, and security
+tests.
 
-## Estrutura do projeto
+## Project structure
 
 ```text
-config/       schemas, catálogo e configuração pública segura
-openclaw/     plugin e skill de integração
-scripts/      comandos operacionais e validações
-src/          ingestão, staging, extração, fila e publicação
-tests/        testes e fixtures sintéticos
-anuncios/     runtime privado ignorado pelo Git
-docs/assets/  recursos públicos do README
+config/       schemas, catalog, and secure public configuration
+openclaw/     integration plugin and skill
+scripts/      operational commands and validation tools
+src/          ingestion, staging, extraction, queue, and publication
+tests/        automated tests and synthetic fixtures
+anuncios/     private runtime data excluded from Git
+docs/assets/  public README assets
 ```
 
-## Limitações atuais
+## Current limitations
 
-- somente imagens entram nos anúncios; vídeos são ignorados;
-- há um grupo de origem por instância;
-- a validação visual está desabilitada;
-- o marketplace começa desabilitado;
-- atualizações do OpenClaw podem exigir revalidar patches de álbum e reações;
-- operação real exige monitoramento dos checkpoints e do gateway.
+- only images are attached to listings; videos are ignored;
+- each instance supports one source group;
+- visual validation is disabled;
+- marketplace integration starts disabled;
+- OpenClaw upgrades may require album and reaction patches to be revalidated;
+- production use requires monitoring the gateway and publication checkpoints.
 
-## Segurança
+## Security
 
-Não abra uma issue pública contendo token, telefone, JID, nome de grupo, anúncio,
-mídia ou log real. Use o fluxo descrito em [SECURITY.md](SECURITY.md).
+Do not open a public issue containing a real token, phone number, JID, group
+name, listing, media file, or log. Follow the process in
+[SECURITY.md](SECURITY.md).
 
-## Licença
+## License
 
-Distribuído sob a licença [MIT](LICENSE).
+Distributed under the [MIT License](LICENSE).
