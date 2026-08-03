@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import stat
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+
+ROOT = Path(
+    os.environ.get("IMPORTER_ROOT") or Path(__file__).resolve().parents[1]
+).expanduser().resolve()
+sys.path.insert(0, str(ROOT / "src"))
+
+from whatsapp_importer.config import ConfigurationError, load_settings
+
+
+JID_RE = re.compile(r"^[0-9]+@g\.us$")
+CHAT_RE = re.compile(r"^[0-9]{8,15}$")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"Configuração inválida: {message}")
+
+
+def require_private_mode(path: Path) -> None:
+    if not path.exists():
+        return
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode & 0o077:
+        fail(f"{path.name} deve usar permissão 600.")
+
+
+def validate_public_example(root: Path) -> None:
+    path = root / "config" / "settings.example.json"
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError) as error:
+        fail(f"settings.example.json ausente ou inválido: {error}")
+    checks = (
+        settings.get("dry_run") is True,
+        settings.get("allowed_chat_ids") == [],
+        settings.get("allowed_media_roots") == [],
+        (settings.get("group_intake") or {}).get("enabled") is False,
+        (settings.get("group_publication") or {}).get("enabled") is False,
+        (settings.get("personal_publication") or {}).get("enabled") is False,
+        (settings.get("marketplace_api") or {}).get("enabled") is False,
+        (settings.get("marketplace_api") or {}).get("visible") is False,
+    )
+    if not all(checks):
+        fail("o exemplo público precisa permanecer sem destinos e sem escritas.")
+    serialized = json.dumps(settings, ensure_ascii=False)
+    if re.search(r"[0-9]{10,}@(g\.us|s\.whatsapp\.net)", serialized):
+        fail("o exemplo público contém um JID realista.")
+    print("Exemplo público seguro: OK")
+
+
+def validate_local(root: Path) -> None:
+    local_path = root / "config" / "settings.local.json"
+    legacy_path = root / "config" / "settings.json"
+    if not local_path.is_file():
+        fail("execute scripts/bootstrap-local-config primeiro.")
+    if not legacy_path.is_symlink() or os.readlink(legacy_path) != "settings.local.json":
+        fail("config/settings.json deve apontar para settings.local.json.")
+    require_private_mode(local_path)
+    require_private_mode(root / ".env")
+    require_private_mode(root / ".marketplace-token")
+
+    try:
+        settings = load_settings(root)
+    except ConfigurationError as error:
+        fail(str(error))
+
+    if type(settings.get("dry_run")) is not bool:
+        fail("dry_run deve ser booleano.")
+    allowed = settings.get("allowed_chat_ids")
+    if not isinstance(allowed, list) or any(
+        not CHAT_RE.fullmatch(str(value)) for value in allowed
+    ):
+        fail("allowed_chat_ids deve conter apenas IDs numéricos válidos.")
+
+    intake = settings.get("group_intake") or {}
+    if intake.get("enabled") is True:
+        if not JID_RE.fullmatch(str(intake.get("group_jid") or "")):
+            fail("group_intake.group_jid inválido.")
+        if not str(intake.get("group_name") or "").strip():
+            fail("group_intake.group_name ausente.")
+        if str(intake.get("approval_chat_id") or "") not in {
+            str(value) for value in allowed
+        }:
+            fail("approval_chat_id não pertence à allowlist pessoal.")
+
+    publication = settings.get("group_publication") or {}
+    if publication.get("enabled") is True:
+        if not JID_RE.fullmatch(str(publication.get("group_jid") or "")):
+            fail("group_publication.group_jid inválido.")
+        if not str(publication.get("group_name") or "").strip():
+            fail("group_publication.group_name ausente.")
+        if (
+            intake.get("enabled") is True
+            and publication.get("group_jid") == intake.get("group_jid")
+        ):
+            fail("entrada e publicação não podem usar o mesmo grupo.")
+
+    marketplace = settings.get("marketplace_api") or {}
+    if marketplace.get("enabled") is True:
+        parsed = urlparse(str(marketplace.get("base_url") or ""))
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            fail("marketplace_api.base_url inválida.")
+        if not str(marketplace.get("path") or "").startswith("/"):
+            fail("marketplace_api.path inválido.")
+        token = (
+            os.environ.get("MARKETPLACE_INTERNAL_API_TOKEN")
+            or os.environ.get("MARKETPLACE_API_TOKEN")
+        )
+        token_file = root / ".marketplace-token"
+        if not token and (not token_file.is_file() or not token_file.read_text().strip()):
+            fail("marketplace habilitado sem token local.")
+
+    print(
+        "Configuração local válida: "
+        f"intake={'on' if intake.get('enabled') is True else 'off'}, "
+        f"publication={'on' if publication.get('enabled') is True else 'off'}, "
+        f"marketplace={'on' if marketplace.get('enabled') is True else 'off'}"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--public-example", action="store_true")
+    args = parser.parse_args()
+    if args.public_example:
+        validate_public_example(ROOT)
+    else:
+        validate_local(ROOT)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

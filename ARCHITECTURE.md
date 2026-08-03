@@ -78,3 +78,15 @@ checkpoint demonstra que o provedor não aceitou a mensagem.
 O exemplo versionado mantém `DRY_RUN=true`, entrada em grupo desabilitada,
 publicação desabilitada, marketplace desabilitado e listas de destino vazias.
 Ativação real exige configuração local explícita.
+
+## Compatibilidade de configuração
+
+O arquivo real é `config/settings.local.json`, sempre ignorado pelo Git. O
+bootstrap cria também `config/settings.json` como link simbólico local para
+permitir uma migração segura quando uma instância antiga do plugin ainda estiver
+carregada em memória. A versão atual do plugin procura primeiro o arquivo local
+e mantém o nome legado apenas como fallback.
+
+O validador operacional falha antes da inicialização quando encontra permissões
+abertas, link inesperado, destino malformado, entrada e saída no mesmo grupo ou
+marketplace habilitado sem credencial.

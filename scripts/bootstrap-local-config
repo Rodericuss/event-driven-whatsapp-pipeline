@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="${IMPORTER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ENV_FILE="$ROOT/.env"
+ENV_EXAMPLE="$ROOT/.env.example"
+SETTINGS_DIR="$ROOT/config"
+SETTINGS_LOCAL="$SETTINGS_DIR/settings.local.json"
+SETTINGS_EXAMPLE="$SETTINGS_DIR/settings.example.json"
+SETTINGS_LEGACY="$SETTINGS_DIR/settings.json"
+
+if [[ ! -f "$ENV_EXAMPLE" || ! -f "$SETTINGS_EXAMPLE" ]]; then
+  echo "Arquivos públicos de exemplo ausentes." >&2
+  exit 2
+fi
+
+if [[ ! -e "$ENV_FILE" ]]; then
+  cp "$ENV_EXAMPLE" "$ENV_FILE"
+fi
+if [[ ! -e "$SETTINGS_LOCAL" ]]; then
+  cp "$SETTINGS_EXAMPLE" "$SETTINGS_LOCAL"
+fi
+
+chmod 600 "$ENV_FILE" "$SETTINGS_LOCAL"
+
+if [[ -L "$SETTINGS_LEGACY" ]]; then
+  if [[ "$(readlink "$SETTINGS_LEGACY")" != "settings.local.json" ]]; then
+    echo "config/settings.json aponta para um destino inesperado; nenhuma alteração feita." >&2
+    exit 2
+  fi
+elif [[ -e "$SETTINGS_LEGACY" ]]; then
+  echo "config/settings.json já existe e não é o link de compatibilidade esperado." >&2
+  exit 2
+else
+  ln -s settings.local.json "$SETTINGS_LEGACY"
+fi
+
+echo "Configuração local preparada com defaults seguros."

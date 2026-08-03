@@ -378,7 +378,7 @@ function assertMediaParams(params) {
   return { importId, message, mediaUrls };
 }
 
-async function loadGroupPublication(projectRoot) {
+export async function loadGroupPublication(projectRoot) {
   const configuredPath = String(process.env.IMPORTER_SETTINGS_PATH ?? "").trim();
   const candidates = [
     configuredPath

@@ -21,6 +21,18 @@ class OpenClawPluginTests(unittest.TestCase):
             import { pathToFileURL } from "node:url";
 
             await mkdir(`${process.env.TEMP_ROOT}/scripts`, { recursive: true });
+            await mkdir(`${process.env.TEMP_ROOT}/config`, { recursive: true });
+            await writeFile(
+              `${process.env.TEMP_ROOT}/config/settings.local.json`,
+              JSON.stringify({
+                group_publication: {
+                  enabled: true,
+                  groupJid: "ignored-camel-case-field",
+                  group_jid: "100000000000000002@g.us",
+                  group_name: "GRUPO DE PUBLICAÇÃO EXEMPLO",
+                },
+              }),
+            );
             await writeFile(
               `${process.env.TEMP_ROOT}/scripts/stage-message`,
               `#!/usr/bin/env node
@@ -65,6 +77,9 @@ class OpenClawPluginTests(unittest.TestCase):
             await writeFile(modulePath, source);
             const loadedPlugin = await import(pathToFileURL(modulePath).href);
             const plugin = loadedPlugin.default;
+            const loadedGroupPublication = await loadedPlugin.loadGroupPublication(
+              process.env.TEMP_ROOT,
+            );
             const handlers = new Map();
             const routes = [];
             plugin.register({
@@ -237,6 +252,7 @@ class OpenClawPluginTests(unittest.TestCase):
               capturedReaction,
               capturedPayload,
               capturedGroupPayload,
+              loadedGroupPublication,
             }));
             """
         )
@@ -274,6 +290,16 @@ class OpenClawPluginTests(unittest.TestCase):
         self.assertTrue(result["safeAllowlistedIngress"])
         self.assertFalse(result["unsafeExtraGroupIngress"])
         self.assertFalse(result["unsafeGroupAckIngress"])
+
+    def test_group_publication_loads_local_settings_before_legacy_path(self) -> None:
+        result = self.run_plugin_probe()
+        self.assertEqual(
+            {
+                "groupJid": "100000000000000002@g.us",
+                "groupName": "GRUPO DE PUBLICAÇÃO EXEMPLO",
+            },
+            result["loadedGroupPublication"],
+        )
 
     def test_capture_and_dispatch_hooks_are_both_registered(self) -> None:
         result = self.run_plugin_probe()

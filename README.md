@@ -54,16 +54,22 @@ Requisitos principais:
 - OpenClaw com o canal WhatsApp configurado;
 - Ollama com um modelo capaz de produzir JSON estruturado.
 
-Crie os arquivos locais:
+Prepare os arquivos locais com defaults seguros:
 
 ```bash
-cp .env.example .env
-cp config/settings.example.json config/settings.local.json
-chmod 600 .env config/settings.local.json
+scripts/bootstrap-local-config
+scripts/validate-local-config
 ```
 
-Preencha `.env` somente na máquina que executará o importador. Destinos reais
-devem continuar vazios enquanto o fluxo estiver em desenvolvimento.
+O bootstrap cria `.env`, `config/settings.local.json` e um link local
+`config/settings.json -> settings.local.json`. Esse link mantém compatibilidade
+com processos antigos do plugin que ainda estejam carregados durante uma
+migração; todos os três caminhos são ignorados pelo Git. Arquivos existentes
+nunca são sobrescritos silenciosamente.
+
+Preencha `.env` e o JSON local somente na máquina que executará o importador.
+Destinos reais devem continuar vazios enquanto o fluxo estiver em
+desenvolvimento. A validação não imprime IDs, tokens nem nomes configurados.
 
 A configuração é carregada nesta ordem:
 
@@ -74,6 +80,18 @@ A configuração é carregada nesta ordem:
 
 As variáveis de ambiente sobrescrevem os campos equivalentes do JSON. O
 carregador também lê `.env` sem substituir variáveis já definidas pelo processo.
+
+Antes de iniciar ou reiniciar o gateway, execute:
+
+```bash
+scripts/validate-local-config
+scripts/validate-local-config --public-example
+```
+
+O primeiro comando confere permissões, allowlists, JIDs, separação entre origem
+e destino, token quando o marketplace estiver habilitado e o link de
+compatibilidade. O segundo garante que a configuração publicada continua com
+defaults sem escrita.
 
 ## Segurança operacional
 
@@ -109,6 +127,7 @@ checkpoints privados. Nunca os adicione ao Git, mesmo em fixtures ou exemplos.
 
 ```bash
 python3 -m unittest discover -s tests -v
+scripts/validate-local-config --public-example
 ```
 
 Validações adicionais recomendadas:
