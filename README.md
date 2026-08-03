@@ -1,4 +1,4 @@
-# WhatsApp Listing Pipeline
+# Event-Driven WhatsApp Pipeline
 
 An event-driven automation pipeline that turns sequences of WhatsApp text and
 images into structured listings while keeping a human in control of every
@@ -97,8 +97,8 @@ served by the configured Ollama installation.
 Clone the repository and prepare a private local configuration:
 
 ```bash
-git clone https://github.com/Rodericuss/auto-publication-romildonegocios.git
-cd auto-publication-romildonegocios
+git clone https://github.com/Rodericuss/event-driven-whatsapp-pipeline.git
+cd event-driven-whatsapp-pipeline
 scripts/bootstrap-local-config
 ```
 
