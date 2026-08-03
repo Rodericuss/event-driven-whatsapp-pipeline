@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+
+REACTION_EXTRACT_INSERT = r'''	const reaction = message.reactionMessage;
+	const reactionMessageId = typeof reaction?.key?.id === "string" ? reaction.key.id.trim() : "";
+	const reactionEmoji = typeof reaction?.text === "string" ? reaction.text.trim().replace(/[\uFE0E\uFE0F]/gu, "").replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "") : "";
+	if (reactionMessageId && (reactionEmoji === "👍" || reactionEmoji === "👎")) {
+		return `ROMILDO_APPROVAL_REACTION:${reactionMessageId}:${reactionEmoji === "👍" ? "APPROVE" : "CANCEL"}`;
+	}
+'''
+
+INTERACTIVE_EXTRACT_INSERT = r'''function extractInteractiveResponseText(message) {
+''' + REACTION_EXTRACT_INSERT + r'''
+	const direct = message.buttonsResponseMessage?.selectedButtonId ?? message.templateButtonReplyMessage?.selectedId ?? message.listResponseMessage?.singleSelectReply?.selectedRowId;
+	if (typeof direct === "string" && direct.trim()) return direct.trim();
+	const paramsJson = message.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+	if (typeof paramsJson !== "string" || !paramsJson.trim()) return;
+	try {
+		const parsed = JSON.parse(paramsJson);
+		for (const key of ["id", "value", "row_id", "selected_id"]) {
+			const value = parsed?.[key];
+			if (typeof value === "string" && value.trim()) return value.trim();
+		}
+	} catch {}
+}
+'''
+
+INTERACTIVE_EXTRACT_CALL = r'''		const interactiveResponse = extractInteractiveResponseText(candidate);
+		if (interactiveResponse) return interactiveResponse;
+'''
+
+SEND_BUTTONS_INSERT = r'''		sendButtons: async (to, text, buttons, sendOptions) => {
+			const jid = resolveOutboundJid(to);
+			if (typeof text !== "string" || !text.trim() || text.length > 4096) throw new Error("WhatsApp action buttons require non-empty text up to 4096 characters.");
+			if (!Array.isArray(buttons) || buttons.length < 1 || buttons.length > 3) throw new Error("WhatsApp action buttons require between one and three buttons.");
+			const normalizedButtons = buttons.map((button) => {
+				const label = typeof button?.label === "string" ? button.label.trim() : "";
+				const value = typeof button?.value === "string" ? button.value.trim() : "";
+				if (!label || label.length > 20) throw new Error("WhatsApp action button labels must contain between one and 20 characters.");
+				if (!value || Buffer.byteLength(value, "utf8") > 256) throw new Error("WhatsApp action button values must contain at most 256 UTF-8 bytes.");
+				return { label, value };
+			});
+			if (typeof params.sock.sendInteractiveButtons !== "function") throw new Error("The active WhatsApp listener does not support action buttons.");
+			const result = await params.sock.sendInteractiveButtons(jid, text, normalizedButtons);
+			recordWhatsAppOutbound(sendOptions?.accountId ?? params.defaultAccountId);
+			return normalizeWhatsAppSendResult(result, "text");
+		},
+'''
+
+MONITOR_TRACKED_INSERT = r'''	const sendTrackedInteractiveButtons = async (jid, text, buttons) => {
+		let lastErr = /* @__PURE__ */ new Error(RECONNECT_IN_PROGRESS_ERROR);
+		for (let attempt = 1;; attempt++) {
+			const currentSock = getCurrentSock();
+			if (currentSock) try {
+				const generated = generateWAMessageFromContent(jid, {
+					viewOnceMessage: {
+						message: {
+							messageContextInfo: {
+								deviceListMetadata: {},
+								deviceListMetadataVersion: 2
+							},
+							interactiveMessage: proto.Message.InteractiveMessage.create({
+								body: { text },
+								footer: { text: "Marketplace Importer" },
+								header: { hasMediaAttachment: false },
+								nativeFlowMessage: {
+									buttons: buttons.map((button) => ({
+										name: "quick_reply",
+										buttonParamsJson: JSON.stringify({
+											display_text: button.label,
+											id: button.value
+										})
+									})),
+									messageParamsJson: ""
+								}
+							})
+						}
+					}
+				}, { userJid: currentSock.user?.id });
+				if (!generated?.key?.id || !generated.message) throw new Error("WhatsApp did not generate the action button message.");
+				await currentSock.relayMessage(jid, generated.message, { messageId: generated.key.id });
+				rememberOutboundMessage(jid, generated);
+				return generated;
+			} catch (err) {
+				if (!shouldRetryDisconnect() || !isRetryableSendDisconnectError(err)) throw err;
+				lastErr = err;
+				if (shouldClearSocketRefAfterSendFailure(err) && options.socketRef?.current === currentSock) options.socketRef.current = null;
+			}
+			else if (!shouldRetryDisconnect()) throw lastErr;
+			if (attempt >= sendRetryMaxAttempts) throw lastErr;
+			const delayMs = computeBackoff(disconnectRetryPolicy, attempt);
+			logWhatsAppVerbose(options.verbose, `Waiting ${delayMs}ms for WhatsApp reconnect before retrying action buttons to ${jid}: ${formatError(lastErr)}`);
+			try {
+				await sleepWithAbort(delayMs, options.disconnectRetryAbortSignal);
+			} catch {
+				throw lastErr;
+			}
+		}
+	};
+'''
+
+MONITOR_TRACKED_INSERT_V1 = MONITOR_TRACKED_INSERT
+MONITOR_TRACKED_INSERT = r'''	const sendTrackedInteractiveButtons = async (jid, text, buttons) => {
+		let lastErr = /* @__PURE__ */ new Error(RECONNECT_IN_PROGRESS_ERROR);
+		for (let attempt = 1;; attempt++) {
+			const currentSock = getCurrentSock();
+			if (currentSock) try {
+				const interactiveMessage = proto.Message.InteractiveMessage.create({
+					body: proto.Message.InteractiveMessage.Body.create({ text }),
+					footer: proto.Message.InteractiveMessage.Footer.create({ text: "Marketplace Importer" }),
+					header: proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
+					nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+						buttons: buttons.map((button) => proto.Message.InteractiveMessage.NativeFlowMessage.NativeFlowButton.create({
+							name: "quick_reply",
+							buttonParamsJson: JSON.stringify({
+								display_text: button.label,
+								id: button.value
+							})
+						})),
+						messageParamsJson: "{}",
+						messageVersion: 1
+					})
+				});
+				const generated = generateWAMessageFromContent(jid, { interactiveMessage }, { userJid: currentSock.user?.id });
+				if (!generated?.key?.id || !generated.message) throw new Error("WhatsApp did not generate the action button message.");
+				const privacyModeTs = (Math.floor(Date.now() / 1000) - 77980457).toString();
+				const bizNode = {
+					tag: "biz",
+					attrs: {
+						actual_actors: "2",
+						host_storage: "2",
+						privacy_mode_ts: privacyModeTs
+					},
+					content: [
+						{
+							tag: "interactive",
+							attrs: { type: "native_flow", v: "1" },
+							content: [{
+								tag: "native_flow",
+								attrs: { v: "9", name: "mixed" }
+							}]
+						},
+						{
+							tag: "quality_control",
+							attrs: { source_type: "third_party" }
+						}
+					]
+				};
+				const additionalNodes = jid.endsWith("@g.us") ? [bizNode] : [
+					{ tag: "bot", attrs: { biz_bot: "1" } },
+					bizNode
+				];
+				await currentSock.relayMessage(jid, generated.message, {
+					messageId: generated.key.id,
+					additionalNodes
+				});
+				rememberOutboundMessage(jid, generated);
+				return generated;
+			} catch (err) {
+				if (!shouldRetryDisconnect() || !isRetryableSendDisconnectError(err)) throw err;
+				lastErr = err;
+				if (shouldClearSocketRefAfterSendFailure(err) && options.socketRef?.current === currentSock) options.socketRef.current = null;
+			}
+			else if (!shouldRetryDisconnect()) throw lastErr;
+			if (attempt >= sendRetryMaxAttempts) throw lastErr;
+			const delayMs = computeBackoff(disconnectRetryPolicy, attempt);
+			logWhatsAppVerbose(options.verbose, `Waiting ${delayMs}ms for WhatsApp reconnect before retrying action buttons to ${jid}: ${formatError(lastErr)}`);
+			try {
+				await sleepWithAbort(delayMs, options.disconnectRetryAbortSignal);
+			} catch {
+				throw lastErr;
+			}
+		}
+	};
+'''
+
+MONITOR_WRAPPER_INSERT = r'''				sendInteractiveButtons: (jid, text, buttons) => sendTrackedInteractiveButtons(jid, text, buttons),
+'''
+
+RELAY_INTERACTIVE_BUTTONS = r'''				await currentSock.relayMessage(jid, generated.message, {
+					messageId: generated.key.id,
+					additionalNodes
+				});
+'''
+
+RELAY_INTERACTIVE_BUTTONS_WITH_ACK = r'''				let deliveryAckTimer;
+				let onDeliveryUpdate;
+				const deliveryAck = new Promise((resolve, reject) => {
+					const settle = (handler, value) => {
+						if (!onDeliveryUpdate) return;
+						currentSock.ev.off("messages.update", onDeliveryUpdate);
+						onDeliveryUpdate = void 0;
+						if (deliveryAckTimer) clearTimeout(deliveryAckTimer);
+						handler(value);
+					};
+					onDeliveryUpdate = (updates) => {
+						for (const entry of updates ?? []) {
+							if (entry?.key?.id !== generated.key.id) continue;
+							const status = entry?.update?.status;
+							if (status === proto.WebMessageInfo.Status.ERROR) {
+								settle(reject, new Error("WhatsApp rejected the action button message."));
+								return;
+							}
+							if (typeof status === "number" && status >= proto.WebMessageInfo.Status.SERVER_ACK) {
+								settle(resolve, status);
+								return;
+							}
+						}
+					};
+					currentSock.ev.on("messages.update", onDeliveryUpdate);
+					deliveryAckTimer = setTimeout(() => {
+						settle(reject, new Error("WhatsApp did not acknowledge the action button message within 12 seconds; it will not be retried automatically."));
+					}, 12e3);
+				});
+				try {
+					await currentSock.relayMessage(jid, generated.message, {
+						messageId: generated.key.id,
+						additionalNodes
+					});
+					await deliveryAck;
+				} finally {
+					if (onDeliveryUpdate) currentSock.ev.off("messages.update", onDeliveryUpdate);
+					if (deliveryAckTimer) clearTimeout(deliveryAckTimer);
+				}
+'''
+
+
+def find_plugin() -> Path:
+    override = os.environ.get("OPENCLAW_WHATSAPP_PLUGIN_DIR")
+    if override:
+        plugin = Path(override).resolve()
+        package = json.loads((plugin / "package.json").read_text())
+        if package.get("version") != "2026.6.1":
+            raise SystemExit("patch homologado apenas para @openclaw/whatsapp 2026.6.1")
+        return plugin
+    projects = Path.home() / ".openclaw" / "npm" / "projects"
+    candidates = sorted(
+        projects.glob("openclaw-whatsapp-*/node_modules/@openclaw/whatsapp"),
+        reverse=True,
+    )
+    for candidate in candidates:
+        package = json.loads((candidate / "package.json").read_text())
+        if package.get("version") == "2026.6.1":
+            return candidate
+    raise SystemExit("plugin @openclaw/whatsapp 2026.6.1 não encontrado")
+
+
+def insert_before(source: str, needle: str, insertion: str, marker: str) -> str:
+    if marker in source:
+        return source
+    if source.count(needle) != 1:
+        raise SystemExit(f"ponto de patch incompatível: {marker}")
+    return source.replace(needle, insertion + needle, 1)
+
+
+def insert_after(source: str, needle: str, insertion: str, marker: str) -> str:
+    if marker in source:
+        return source
+    if source.count(needle) != 1:
+        raise SystemExit(f"ponto de patch incompatível: {marker}")
+    return source.replace(needle, needle + insertion, 1)
+
+
+def main() -> int:
+    plugin = find_plugin()
+    send_api = plugin / "dist" / "send-api-Bjn-h80j.js"
+    monitor = plugin / "dist" / "monitor-CnioHf5V.js"
+    originals = {send_api: send_api.read_text(), monitor: monitor.read_text()}
+
+    patched_api = insert_before(
+        originals[send_api],
+        "function extractText(rawMessage) {\n",
+        INTERACTIVE_EXTRACT_INSERT,
+        "function extractInteractiveResponseText(message)",
+    )
+    patched_api = insert_after(
+        patched_api,
+        "function extractInteractiveResponseText(message) {\n",
+        REACTION_EXTRACT_INSERT,
+        "ROMILDO_APPROVAL_REACTION:",
+    )
+    patched_api = insert_after(
+        patched_api,
+        "\t\tconst caption = candidate.imageMessage?.caption ?? candidate.videoMessage?.caption ?? candidate.documentMessage?.caption;\n\t\tif (caption?.trim()) return caption.trim();\n",
+        INTERACTIVE_EXTRACT_CALL,
+        "const interactiveResponse = extractInteractiveResponseText(candidate);",
+    )
+    patched_api = insert_after(
+        patched_api,
+        "\t};\n\treturn {\n",
+        SEND_BUTTONS_INSERT,
+        "sendButtons: async (to, text, buttons, sendOptions)",
+    )
+
+    patched_monitor = originals[monitor]
+    import_old = 'import { DisconnectReason as DisconnectReason$1, downloadMediaMessage, isJidGroup, normalizeMessageContent as normalizeMessageContent$1 } from "baileys";'
+    import_new = 'import { DisconnectReason as DisconnectReason$1, downloadMediaMessage, generateWAMessageFromContent, isJidGroup, normalizeMessageContent as normalizeMessageContent$1, proto } from "baileys";'
+    if "generateWAMessageFromContent" not in patched_monitor:
+        if patched_monitor.count(import_old) != 1:
+            raise SystemExit("ponto de patch incompatível: import Baileys")
+        patched_monitor = patched_monitor.replace(import_old, import_new, 1)
+    if (
+        "const sendTrackedInteractiveButtons = async (jid, text, buttons)"
+        in patched_monitor
+        and "const privacyModeTs =" not in patched_monitor
+    ):
+        if MONITOR_TRACKED_INSERT_V1 not in patched_monitor:
+            raise SystemExit("ponto de patch incompatível: atualização dos botões")
+        patched_monitor = patched_monitor.replace(
+            MONITOR_TRACKED_INSERT_V1,
+            MONITOR_TRACKED_INSERT,
+            1,
+        )
+    else:
+        patched_monitor = insert_before(
+            patched_monitor,
+            "\tconst summarizeGroupMeta = async (meta) => {\n",
+            MONITOR_TRACKED_INSERT,
+            "const sendTrackedInteractiveButtons = async (jid, text, buttons)",
+        )
+    if "const deliveryAck = new Promise((resolve, reject)" not in patched_monitor:
+        if patched_monitor.count(RELAY_INTERACTIVE_BUTTONS) != 1:
+            raise SystemExit("ponto de patch incompatível: confirmação dos botões")
+        patched_monitor = patched_monitor.replace(
+            RELAY_INTERACTIVE_BUTTONS,
+            RELAY_INTERACTIVE_BUTTONS_WITH_ACK,
+            1,
+        )
+    patched_monitor = insert_after(
+        patched_monitor,
+        "\t\t\tsock: {\n",
+        MONITOR_WRAPPER_INSERT,
+        "sendInteractiveButtons: (jid, text, buttons) =>",
+    )
+
+    changed = patched_api != originals[send_api] or patched_monitor != originals[monitor]
+    send_api.write_text(patched_api)
+    monitor.write_text(patched_monitor)
+    try:
+        subprocess.run(["node", "--check", str(send_api)], check=True)
+        subprocess.run(["node", "--check", str(monitor)], check=True)
+    except Exception:
+        for path, contents in originals.items():
+            path.write_text(contents)
+        raise
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "plugin": str(plugin),
+                "version": "2026.6.1",
+                "changed": changed,
+                "restart_required": changed,
+            }
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

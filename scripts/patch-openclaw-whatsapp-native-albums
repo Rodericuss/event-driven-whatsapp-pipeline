@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+
+SEND_API_INSERT = r'''		sendAlbum: async (to, text, mediaItems, sendOptions) => {
+			const jid = resolveOutboundJid(to);
+			const imageCount = mediaItems.filter((item) => item.mediaType.startsWith("image/")).length;
+			const videoCount = mediaItems.filter((item) => item.mediaType.startsWith("video/")).length;
+			if (mediaItems.length < 2 || imageCount + videoCount !== mediaItems.length) throw new Error("WhatsApp albums require at least two image/video items.");
+			const resolvedPayloadText = await resolveMentions(jid, text);
+			const parent = await params.sock.sendMessage(jid, {
+				album: {
+					expectedImageCount: imageCount,
+					expectedVideoCount: videoCount
+				}
+			});
+			if (!parent?.key?.id) throw new Error("WhatsApp did not accept the album parent message.");
+			const results = [normalizeWhatsAppSendResult(parent, "media")];
+			for (const [index, item] of mediaItems.entries()) {
+				let payload;
+				if (item.mediaType.startsWith("image/")) payload = await addWhatsAppImagePreviewFields({
+					image: item.buffer,
+					caption: index === 0 ? resolvedPayloadText.text || void 0 : void 0,
+					mimetype: item.mediaType
+				});
+				else payload = {
+					video: item.buffer,
+					caption: index === 0 ? resolvedPayloadText.text || void 0 : void 0,
+					mimetype: item.mediaType
+				};
+				payload = addWhatsAppOutboundMentionsToContent({
+					...payload,
+					albumParentKey: parent.key
+				}, index === 0 ? resolvedPayloadText.mentionedJids : []);
+				results.push(normalizeWhatsAppSendResult(await params.sock.sendMessage(jid, payload), "media"));
+			}
+			recordWhatsAppOutbound(sendOptions?.accountId ?? params.defaultAccountId);
+			return combineWhatsAppSendResults("media", results);
+		},
+'''
+
+SEND_INSERT = r'''		if (mediaUrls.length > 1) {
+			if (typeof active.sendAlbum !== "function") throw new Error("The active WhatsApp listener does not support native albums.");
+			const preparedItems = [];
+			for (const mediaUrl of mediaUrls) {
+				const prepared = await prepareWhatsAppOutboundMedia(await loadOutboundMediaFromUrl(mediaUrl, {
+					maxBytes: resolveWhatsAppMediaMaxBytes(account),
+					mediaAccess: options.mediaAccess,
+					mediaLocalRoots: options.mediaLocalRoots,
+					mediaReadFile: options.mediaReadFile
+				}), mediaUrl);
+				if (prepared.kind !== "image" && prepared.kind !== "video") throw new Error("WhatsApp native albums support only images and videos.");
+				preparedItems.push({
+					buffer: prepared.buffer,
+					mediaType: prepared.mimetype
+				});
+			}
+			outboundLog.info(`Sending native album -> ${redactedJid} (${preparedItems.length} media)`);
+			logger.info({
+				jid: redactedJid,
+				hasMedia: true,
+				mediaCount: preparedItems.length,
+				nativeAlbum: true
+			}, "sending native album");
+			if (!isWhatsAppNewsletterJid(jid)) await active.sendComposingTo(to);
+			const accountId = Boolean(options.accountId?.trim()) ? resolvedAccountId : void 0;
+			const result = await active.sendAlbum(to, text, preparedItems, { accountId });
+			const messageId = result?.messageId ?? "unknown";
+			const sentRemoteJid = resolveActualSentRemoteJid(result, jid);
+			const durationMs = Date.now() - startedAt;
+			outboundLog.info(`Sent native album ${messageId} -> ${redactedJid} (${durationMs}ms)`);
+			logger.info({
+				jid: redactedJid,
+				messageId,
+				mediaCount: preparedItems.length,
+				nativeAlbum: true
+			}, "sent native album");
+			return {
+				messageId,
+				toJid: sentRemoteJid
+			};
+		}
+'''
+
+
+def find_plugin() -> Path:
+    projects = Path.home() / ".openclaw" / "npm" / "projects"
+    candidates = sorted(
+        projects.glob("openclaw-whatsapp-*/node_modules/@openclaw/whatsapp"),
+        reverse=True,
+    )
+    if not candidates:
+        raise SystemExit("plugin @openclaw/whatsapp não encontrado")
+    for candidate in candidates:
+        package = json.loads((candidate / "package.json").read_text())
+        if package.get("version") == "2026.6.1":
+            return candidate
+    raise SystemExit("patch homologado apenas para @openclaw/whatsapp 2026.6.1")
+
+
+def insert_once(source: str, needle: str, insertion: str, marker: str) -> str:
+    if marker in source:
+        return source
+    if source.count(needle) != 1:
+        raise SystemExit(f"ponto de patch incompatível: {marker}")
+    return source.replace(needle, needle + insertion, 1)
+
+
+def main() -> int:
+    plugin = find_plugin()
+    send_api = plugin / "dist" / "send-api-Bjn-h80j.js"
+    send = plugin / "dist" / "send-DSlVXKL_.js"
+    originals = {send_api: send_api.read_text(), send: send.read_text()}
+
+    patched_api = insert_once(
+        originals[send_api],
+        "\t};\n\treturn {\n",
+        SEND_API_INSERT,
+        "sendAlbum: async (to, text, mediaItems, sendOptions)",
+    )
+    patched_send = insert_once(
+        originals[send],
+        "\ttry {\n\t\tconst redactedJid = redactIdentifier(jid);\n",
+        SEND_INSERT,
+        "Sending native album ->",
+    )
+    changed = patched_api != originals[send_api] or patched_send != originals[send]
+    send_api.write_text(patched_api)
+    send.write_text(patched_send)
+
+    try:
+        subprocess.run(["node", "--check", str(send_api)], check=True)
+        subprocess.run(["node", "--check", str(send)], check=True)
+    except Exception:
+        for path, contents in originals.items():
+            path.write_text(contents)
+        raise
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "plugin": str(plugin),
+                "version": "2026.6.1",
+                "changed": changed,
+                "restart_required": changed,
+            }
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,64 @@
+{
+  "dry_run": true,
+  "allowed_chat_ids": [],
+  "allowed_media_roots": [],
+  "redacted_terms": [],
+  "group_intake": {
+    "enabled": false,
+    "shadow_mode": true,
+    "group_name": "",
+    "group_jid": "",
+    "approval_chat_id": ""
+  },
+  "extraction_model": {
+    "provider": "ollama",
+    "name": "qwen3-agent",
+    "endpoint": "http://127.0.0.1:11434",
+    "timeout_seconds": 120,
+    "supports_images": false
+  },
+  "marketplace_api": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:4000",
+    "path": "/api/internal/imported-products",
+    "dry_run_only": true,
+    "visible": false
+  },
+  "personal_publication": {
+    "enabled": false,
+    "channel": "whatsapp"
+  },
+  "group_publication": {
+    "enabled": false,
+    "channel": "whatsapp",
+    "group_name": "",
+    "group_jid": ""
+  },
+  "item_keywords": [
+    "maquina",
+    "máquina",
+    "veiculo",
+    "veículo",
+    "equipamento",
+    "implemento",
+    "trator",
+    "onibus",
+    "ônibus",
+    "micro-onibus",
+    "micro-ônibus",
+    "caminhao",
+    "caminhão",
+    "escavadeira",
+    "retroescavadeira",
+    "pa carregadeira",
+    "pá carregadeira",
+    "pulverizador",
+    "colheitadeira",
+    "guindaste",
+    "motoniveladora",
+    "rolo compactador",
+    "carreta",
+    "plantadeira",
+    "semeadeira"
+  ]
+}

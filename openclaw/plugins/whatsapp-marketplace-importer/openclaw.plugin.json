@@ -1,0 +1,61 @@
+{
+  "id": "whatsapp-marketplace-importer",
+  "name": "WhatsApp Marketplace Importer",
+  "description": "Agrupa anúncios do WhatsApp com staging persistente e publica no grupo autorizado após revisão.",
+  "version": "0.6.1",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "projectRoot",
+      "allowedChatIds",
+      "dryRun"
+    ],
+    "properties": {
+      "projectRoot": {
+        "type": "string",
+        "minLength": 1
+      },
+      "allowedChatIds": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "minLength": 8
+        }
+      },
+      "dryRun": {
+        "type": "boolean"
+      },
+      "groupIntake": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "groupJid",
+          "approvalChatId",
+          "shadowMode"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "groupJid": {
+            "type": "string",
+            "pattern": "^[0-9]+@g\\.us$"
+          },
+          "approvalChatId": {
+            "type": "string",
+            "minLength": 8
+          },
+          "shadowMode": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

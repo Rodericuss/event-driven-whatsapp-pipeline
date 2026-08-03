@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from whatsapp_importer.config import load_settings
+
+
+ROUTE = "/api/romildonegocios/whatsapp/action-buttons-test"
+
+
+def main() -> int:
+    settings = load_settings(PROJECT_ROOT)
+    configured_chat = os.environ.get("OPENCLAW_PERSONAL_CHAT_ID") or next(
+        iter(settings.get("allowed_chat_ids") or []), ""
+    )
+    chat_id = "".join(
+        character
+        for character in str(configured_chat)
+        if character.isdigit()
+    )
+    if not chat_id:
+        raise SystemExit("OPENCLAW_PERSONAL_CHAT_ID não está definido.")
+    config_path = Path(
+        os.environ.get("OPENCLAW_CONFIG_PATH")
+        or Path.home() / ".openclaw" / "openclaw.json"
+    )
+    config = json.loads(config_path.read_text())
+    auth = config.get("gateway", {}).get("auth", {})
+    token = auth.get("token")
+    if auth.get("mode") != "token" or not isinstance(token, str) or not token:
+        raise SystemExit("Gateway local sem autenticação por token.")
+
+    payload = {
+        "chatId": chat_id,
+        "approval": f"TEST_ACTION_BUTTONS:{chat_id}",
+    }
+    request = urllib.request.Request(
+        f"http://127.0.0.1:18789{ROUTE}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"OpenClaw recusou o teste: {detail}") from error
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

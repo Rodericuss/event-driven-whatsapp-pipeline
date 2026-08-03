@@ -1,0 +1,28 @@
+{
+  "source": "Catálogo sintético compatível com o contrato product_types",
+  "inspected_at": "2026-07-28",
+  "categories": [
+    "maquinas",
+    "imoveis",
+    "geral"
+  ],
+  "types": [
+    {"name": "Confirmar com o vendedor", "category": "geral"},
+    {"name": "Confirmar com o vendedor", "category": "maquinas"},
+    {"name": "Confirmar com o vendedor", "category": "imoveis"},
+    {"name": "Trator", "category": "maquinas"},
+    {"name": "Pá Carregadeira", "category": "maquinas"},
+    {"name": "Pulverizador", "category": "maquinas"},
+    {"name": "Colheitadeira", "category": "maquinas"},
+    {"name": "Escavadeira", "category": "maquinas"},
+    {"name": "Caminhão", "category": "maquinas"},
+    {"name": "Ônibus ", "category": "maquinas"},
+    {"name": "Fazenda", "category": "imoveis"},
+    {"name": "Chácara", "category": "imoveis"},
+    {"name": "Sítio", "category": "imoveis"},
+    {"name": "Terreno Rural", "category": "imoveis"},
+    {"name": "Terreno Urbano", "category": "imoveis"},
+    {"name": "Casa", "category": "imoveis"},
+    {"name": "Apartamento", "category": "imoveis"}
+  ]
+}

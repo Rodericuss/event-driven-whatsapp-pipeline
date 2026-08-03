@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--sync-fly",
+        action="store_true",
+        help="sincroniza o token com o app Fly explicitamente configurado",
+    )
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    target = Path(
+        os.environ.get("MARKETPLACE_TOKEN_FILE") or root / ".marketplace-token"
+    ).expanduser()
+    token = sys.stdin.read().strip()
+    if len(token) < 32:
+        raise SystemExit("token curto demais")
+    target.write_text(token + "\n", encoding="utf-8")
+    os.chmod(target, 0o600)
+    if args.sync_fly:
+        fly_app = os.environ.get("MARKETPLACE_FLY_APP", "").strip()
+        if not fly_app:
+            raise SystemExit("MARKETPLACE_FLY_APP não está definido.")
+        subprocess.run(
+            [
+                os.environ.get("FLY_BIN", "fly"),
+                "secrets",
+                "set",
+                f"INTERNAL_IMPORT_API_TOKEN={token}",
+                "-a",
+                fly_app,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+    print("token local salvo; valor não exibido")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

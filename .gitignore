@@ -1,0 +1,52 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.env
+.env.*
+!.env.example
+.marketplace-token
+config/settings.json
+config/settings.local.json
+
+# Private operator instructions and live handoff material.
+AGENTS.md
+PROJECT_SPEC_AUTO_PUBLICATION_ROMILDONEGOCIOS.md
+docs/HANDOFF_ATUAL.md
+docs/DECISOES.md
+
+# Local OpenClaw/Baileys state and credentials must never enter the repository.
+.openclaw/
+openclaw-data/
+creds.json
+session*.json
+app-state-sync-key*.json
+
+# Runtime databases, logs and local backups.
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+*.jsonl
+*.bak
+*.backup
+
+# Python/Node development artifacts.
+.venv/
+venv/
+htmlcov/
+coverage.xml
+node_modules/
+.DS_Store
+# Runtime announcement packages. Keep directory placeholders only.
+anuncios/recebendo/*
+anuncios/pendentes/*
+anuncios/processados/*
+anuncios/descartados/*
+anuncios/erros/*
+!anuncios/recebendo/.gitkeep
+!anuncios/pendentes/.gitkeep
+!anuncios/processados/.gitkeep
+!anuncios/descartados/.gitkeep
+!anuncios/erros/.gitkeep

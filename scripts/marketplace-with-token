@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TOKEN_FILE="$ROOT/.marketplace-token"
+test -s "$TOKEN_FILE" || { echo "token local não configurado" >&2; exit 2; }
+export MARKETPLACE_API_TOKEN="$(<"$TOKEN_FILE")"
+exec "$@"

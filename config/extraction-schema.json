@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "year",
+    "price_in_cents",
+    "description",
+    "category",
+    "type",
+    "seller_confirmation_required",
+    "missing_fields",
+    "warnings",
+    "confidence"
+  ],
+  "properties": {
+    "title": {"type": "string"},
+    "year": {"type": ["integer", "null"]},
+    "price_in_cents": {"type": ["integer", "null"]},
+    "description": {"type": "string"},
+    "category": {"type": "string", "enum": ["maquinas", "imoveis", "geral"]},
+    "type": {
+      "type": "string",
+      "enum": [
+        "Confirmar com o vendedor",
+        "Trator",
+        "Pá Carregadeira",
+        "Pulverizador",
+        "Colheitadeira",
+        "Escavadeira",
+        "Caminhão",
+        "Ônibus",
+        "Fazenda",
+        "Chácara",
+        "Sítio",
+        "Terreno Rural",
+        "Terreno Urbano",
+        "Casa",
+        "Apartamento"
+      ]
+    },
+    "seller_confirmation_required": {"type": "boolean"},
+    "missing_fields": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+import sqlite3, subprocess, sys
+from pathlib import Path
+root=Path(__file__).resolve().parents[1]
+code=sys.argv[1].lower() if len(sys.argv)>1 else ""
+matches=[]
+for p in (root/"anuncios"/"pendentes").glob(f"{code}*/status.json"):
+    if p.parent.name.lower().startswith(code): matches.append(p.parent.name)
+if len(matches)!=1: raise SystemExit("aprovação ambígua ou pacote inexistente")
+import_id=matches[0]
+status_path=root/"anuncios"/"pendentes"/import_id/"status.json"
+import json
+status=json.loads(status_path.read_text())
+status["seller_confirmation_received"] = True
+status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n")
+listing_path=root/"anuncios"/"pendentes"/import_id/"anuncio-extraido.json"
+listing=json.loads(listing_path.read_text())
+title=str(listing.get("title","")).lower()
+if any(word in title for word in ("ônibus", "onibus", "micro-ônibus", "micro onibus")):
+    listing["category"]="maquinas"
+    listing["type"]="Confirmar com o vendedor"
+    listing_path.write_text(json.dumps(listing, ensure_ascii=False, indent=2) + "\n")
+db=sqlite3.connect(root/"anuncios"/"queue.sqlite3")
+db.execute("UPDATE jobs SET status='failed' WHERE import_id=?",(import_id,)); db.commit()
+subprocess.run([str(root/"scripts"/"queue-worker"),import_id],cwd=root,check=True)
+print(import_id)

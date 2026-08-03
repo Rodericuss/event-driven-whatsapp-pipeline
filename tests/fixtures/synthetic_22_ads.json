@@ -1,0 +1,141 @@
+{
+  "source_group_jid": "100000000000000001@g.us",
+  "sender_id": "5500000000001",
+  "approval_chat_id": "5500000000000",
+  "expected_ad_messages": 22,
+  "expected_unique_candidates": 22,
+  "events": [
+    {
+      "id": "synthetic-01",
+      "at": "2026-01-01T12:00:00Z",
+      "text": "Trator Marca Exemplo TX101 ano 2001, revisado, valor R$ 101.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-02",
+      "at": "2026-01-01T12:01:00Z",
+      "text": "Escavadeira Marca Exemplo EX202 ano 2002, operacional, valor R$ 202.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-03",
+      "at": "2026-01-01T12:02:00Z",
+      "text": "Retroescavadeira Marca Exemplo RX303 ano 2003, revisada, valor R$ 303.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-04",
+      "at": "2026-01-01T12:03:00Z",
+      "text": "Pá carregadeira Marca Exemplo PX404 ano 2004, operacional, valor R$ 404.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-05",
+      "at": "2026-01-01T12:04:00Z",
+      "text": "Pulverizador Marca Exemplo PV505 ano 2005, revisado, valor R$ 505.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-06",
+      "at": "2026-01-01T12:05:00Z",
+      "text": "Colheitadeira Marca Exemplo CH606 ano 2006, operacional, valor R$ 606.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-07",
+      "at": "2026-01-01T12:06:00Z",
+      "text": "Guindaste Marca Exemplo GD707 ano 2007, revisado, valor R$ 707.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-08",
+      "at": "2026-01-01T12:07:00Z",
+      "text": "Motoniveladora Marca Exemplo MN808 ano 2008, operacional, valor R$ 808.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-09",
+      "at": "2026-01-01T12:08:00Z",
+      "text": "Rolo compactador Marca Exemplo RC909 ano 2009, revisado, valor R$ 109.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-10",
+      "at": "2026-01-01T12:09:00Z",
+      "text": "Caminhão Marca Exemplo CM110 ano 2010, operacional, valor R$ 210.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-11",
+      "at": "2026-01-01T12:10:00Z",
+      "text": "Ônibus Marca Exemplo ON211 ano 2011, revisado, valor R$ 311.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-12",
+      "at": "2026-01-01T12:11:00Z",
+      "text": "Micro-ônibus Marca Exemplo MO312 ano 2012, operacional, valor R$ 412.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-13",
+      "at": "2026-01-01T12:12:00Z",
+      "text": "Carreta Marca Exemplo CR413 ano 2013, revisada, valor R$ 113.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-14",
+      "at": "2026-01-01T12:13:00Z",
+      "text": "Plantadeira Marca Exemplo PL514 ano 2014, operacional, valor R$ 214.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-15",
+      "at": "2026-01-01T12:14:00Z",
+      "text": "Semeadeira Marca Exemplo SM615 ano 2015, revisada, valor R$ 315.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-16",
+      "at": "2026-01-01T12:15:00Z",
+      "text": "Equipamento Marca Exemplo EQ716 ano 2016, operacional, valor R$ 116.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-17",
+      "at": "2026-01-01T12:16:00Z",
+      "text": "Implemento Marca Exemplo IM817 ano 2017, revisado, valor R$ 217.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-18",
+      "at": "2026-01-01T12:17:00Z",
+      "text": "Máquina Marca Exemplo MQ918 ano 2018, operacional, valor R$ 318.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-19",
+      "at": "2026-01-01T12:18:00Z",
+      "text": "Veículo Marca Exemplo VC119 ano 2019, revisado, valor R$ 119.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-20",
+      "at": "2026-01-01T12:19:00Z",
+      "text": "Trator Marca Exemplo TX220 ano 2020, operacional, valor R$ 220.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-21",
+      "at": "2026-01-01T12:20:00Z",
+      "text": "Escavadeira Marca Exemplo EX321 ano 2021, revisada, valor R$ 321.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    },
+    {
+      "id": "synthetic-22",
+      "at": "2026-01-01T12:21:00Z",
+      "text": "Retroescavadeira Marca Exemplo RX422 ano 2022, operacional, valor R$ 422.000,00. Contato: (00) 00000-0000.",
+      "images": 1
+    }
+  ]
+}

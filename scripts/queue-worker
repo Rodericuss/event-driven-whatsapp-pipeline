@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export IMPORTER_ROOT="$ROOT"
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 - "$@" <<'PY'
+import os, sys, json, subprocess, time
+from pathlib import Path
+from whatsapp_importer.clarification import prepare_clarification, prepare_publication_confirmation
+from whatsapp_importer.config import load_settings
+from whatsapp_importer.queue import approved_for_live, enqueue, mark, publication_lock, requires_publication_without_site, resolve_fly_binary
+from whatsapp_importer.process import process_listing
+root = Path(os.environ["IMPORTER_ROOT"])
+import_id = sys.argv[1] if len(sys.argv) > 1 else ""
+if not import_id or not enqueue(root, import_id):
+    raise SystemExit(0)
+
+
+def save_failure(status_path, error):
+    try:
+        status = json.loads(status_path.read_text())
+    except Exception:
+        return
+    message = str(error).strip()[:1000] or error.__class__.__name__
+    status["automation_failed"] = True
+    status["automation_error"] = message
+    errors = [item for item in status.get("errors", []) if not str(item).startswith("Automação: ")]
+    errors.append(f"Automação: {message}")
+    status["errors"] = errors
+    status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n")
+
+
+def clear_failure(status):
+    status.pop("automation_failed", None)
+    status.pop("automation_error", None)
+    status["errors"] = [
+        item for item in status.get("errors", [])
+        if not str(item).startswith("Automação: ")
+    ]
+
+
+def publish_without_site(settings, reason, *, site_pending=True):
+    group = settings.get("group_publication") or {}
+    group_jid = str(group.get("group_jid") or "")
+    group_approval = f"PUBLISH_GROUP:{import_id}:{group_jid}"
+    subprocess.run(
+        [
+            str(root / "scripts" / "publish-group"),
+            "--import-id",
+            import_id,
+            "--approval",
+            group_approval,
+            "--without-site",
+        ],
+        env={**os.environ},
+        cwd=root,
+        check=True,
+    )
+    final_status = json.loads(status_path.read_text())
+    clear_failure(final_status)
+    if site_pending:
+        final_status["status"] = "group_published_site_pending"
+        final_status["site_registration_pending"] = True
+        final_status["site_registration_error"] = str(reason)[:1000]
+    else:
+        final_status["status"] = "group_published_without_site"
+        final_status["site_registration_pending"] = False
+        final_status["site_registration_skipped"] = True
+        final_status["site_registration_skip_reason"] = str(reason)[:1000]
+        final_status.pop("site_registration_error", None)
+    status_path.write_text(json.dumps(final_status, ensure_ascii=False, indent=2) + "\n")
+    mark(root, import_id, "done")
+
+
+status_path = root / "anuncios" / "pendentes" / import_id / "status.json"
+proxy = None
+mark(root, import_id, "running")
+try:
+    current = json.loads(status_path.read_text())
+    if current.get("status") in {
+        "awaiting_clarification",
+        "awaiting_publication_confirmation",
+        "cancelled_by_user",
+    }:
+        mark(root, import_id, "done")
+        raise SystemExit(0)
+    if current.get("status") != "ready_for_review":
+        process_listing(root, import_id)
+    status = json.loads(status_path.read_text())
+    settings = load_settings(root)
+    visual_required = (
+        (settings.get("visual_validation") or {}).get("required") is True
+    )
+    if (
+        visual_required
+        and status.get("status") == "ready_for_review"
+        and status.get("visual_validation_approved") is not True
+    ):
+        process_listing(root, import_id)
+        status = json.loads(status_path.read_text())
+    if not approved_for_live(status):
+        if status.get("status") == "review_required":
+            prepare_clarification(root, import_id)
+        elif (
+            status.get("status") == "ready_for_review"
+            and status.get("validated") is True
+        ):
+            prepare_publication_confirmation(root, import_id)
+        mark(root, import_id, "done")
+        raise SystemExit(0)
+
+    listing = json.loads(
+        (root / "anuncios" / "pendentes" / import_id / "anuncio-extraido.json").read_text()
+    )
+    if (settings.get("marketplace_api") or {}).get("enabled") is not True:
+        with publication_lock(root):
+            publish_without_site(
+                settings,
+                "Cadastro no site desativado: publicação direta sem link.",
+                site_pending=False,
+            )
+        raise SystemExit(0)
+    if requires_publication_without_site(listing):
+        with publication_lock(root):
+            publish_without_site(
+                settings,
+                "Cadastro no site pendente: tipo definido como Confirmar com o vendedor.",
+            )
+        raise SystemExit(0)
+
+    token = (
+        os.environ.get("MARKETPLACE_INTERNAL_API_TOKEN")
+        or os.environ.get("MARKETPLACE_API_TOKEN")
+        or (
+            (root / ".marketplace-token").read_text().strip()
+            if (root / ".marketplace-token").is_file()
+            else ""
+        )
+    )
+    if not token:
+        raise RuntimeError("Token do marketplace está vazio.")
+    env = {**os.environ, "MARKETPLACE_API_TOKEN": token}
+    fly = resolve_fly_binary()
+    fly_app = os.environ.get("MARKETPLACE_FLY_APP", "").strip()
+    if not fly_app:
+        raise RuntimeError("MARKETPLACE_FLY_APP não está definido.")
+    proxy = subprocess.Popen(
+        [fly, "proxy", "4000:8080", "-a", fly_app],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(4)
+    visible = (settings.get("marketplace_api") or {}).get("visible")
+    approval_mode = "VISIBLE" if visible is True else "INVISIBLE"
+    approval = f"CREATE_{approval_mode}:{import_id}"
+    subprocess.run(
+        [str(root / "scripts" / "validate-marketplace-dry-run"), "--import-id", import_id],
+        env=env,
+        cwd=root,
+        check=True,
+    )
+    try:
+        subprocess.run(
+            [str(root / "scripts" / "execute-marketplace-import"), "--import-id", import_id, "--approval", approval],
+            env=env,
+            cwd=root,
+            check=True,
+        )
+    except subprocess.CalledProcessError as site_error:
+        failed_status = json.loads(status_path.read_text())
+        if (
+            failed_status.get("product_id") is not None
+            or failed_status.get("registered") is True
+        ):
+            raise
+        with publication_lock(root):
+            publish_without_site(settings, site_error)
+        raise SystemExit(0)
+
+    group = settings.get("group_publication") or {}
+    group_jid = str(group.get("group_jid") or "")
+    group_approval = f"PUBLISH_GROUP:{import_id}:{group_jid}"
+    with publication_lock(root):
+        subprocess.run(
+            [str(root / "scripts" / "publish-group"), "--import-id", import_id, "--approval", group_approval],
+            env=env,
+            cwd=root,
+            check=True,
+        )
+    final_status = json.loads(status_path.read_text())
+    clear_failure(final_status)
+    final_status["status"] = "group_published"
+    status_path.write_text(json.dumps(final_status, ensure_ascii=False, indent=2) + "\n")
+    mark(root, import_id, "done")
+except SystemExit:
+    raise
+except Exception as error:
+    save_failure(status_path, error)
+    mark(root, import_id, "failed")
+    raise
+finally:
+    if proxy is not None:
+        proxy.terminate()
+        try:
+            proxy.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proxy.kill()
+            proxy.wait(timeout=5)
+PY

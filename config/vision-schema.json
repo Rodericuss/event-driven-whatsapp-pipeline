@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "is_relevant",
+    "matches_text",
+    "detected_type",
+    "detected_brand",
+    "detected_model",
+    "same_item",
+    "contradictions",
+    "irrelevant_images",
+    "promotional_or_document_images",
+    "confidence"
+  ],
+  "properties": {
+    "is_relevant": {"type": "boolean"},
+    "matches_text": {"type": "boolean"},
+    "detected_type": {"type": ["string", "null"]},
+    "detected_brand": {"type": ["string", "null"]},
+    "detected_model": {"type": ["string", "null"]},
+    "same_item": {"type": "boolean"},
+    "contradictions": {"type": "array", "items": {"type": "string"}},
+    "irrelevant_images": {"type": "array", "items": {"type": "integer"}},
+    "promotional_or_document_images": {
+      "type": "array",
+      "items": {"type": "integer"}
+    },
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}
