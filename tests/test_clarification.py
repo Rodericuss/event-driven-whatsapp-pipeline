@@ -134,6 +134,27 @@ class ClarificationTest(unittest.TestCase):
         status = json.loads((self.package / "status.json").read_text())
         self.assertEqual("awaiting_clarification", status["status"])
 
+    def test_missing_year_asks_for_year_in_personal_chat(self) -> None:
+        listing = json.loads((self.package / "anuncio-extraido.json").read_text())
+        listing.update(
+            {
+                "title": "Caçamba Basculante Rossetti 20m3",
+                "year": None,
+                "missing_fields": ["year"],
+            }
+        )
+        (self.package / "anuncio-extraido.json").write_text(json.dumps(listing))
+        status = json.loads((self.package / "status.json").read_text())
+        status["errors"] = ["year está ausente no texto original."]
+        (self.package / "status.json").write_text(json.dumps(status))
+
+        clarification = prepare_clarification(self.root, IMPORT_ID)
+
+        self.assertIsNotNone(clarification)
+        self.assertEqual("year", clarification["field"])
+        self.assertEqual(CHAT, clarification["chat_id"])
+        self.assertIn("ANO 90bc01fe 2018", clarification["question"])
+
     def test_question_sent_checkpoint_prevents_restart_duplicates(self) -> None:
         prepare_clarification(self.root, IMPORT_ID)
 

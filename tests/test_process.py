@@ -314,6 +314,76 @@ class ProcessTest(unittest.TestCase):
             any("price_in_cents" in error for error in result["errors"])
         )
 
+    def test_missing_source_year_requires_clarification(self) -> None:
+        (self.package / "mensagem-original.txt").write_text(
+            "Caçamba basculante Rossetti 20m3, valor 50.000,00. "
+            "Fone (00) 00000-0000.",
+            encoding="utf-8",
+        )
+        proposal = self.valid_result()
+        proposal.update(
+            {
+                "title": "Caçamba Basculante Rossetti 20m3",
+                "year": None,
+                "price_in_cents": 5000000,
+                "type": "Confirmar com o vendedor",
+                "seller_confirmation_required": True,
+                "missing_fields": [],
+            }
+        )
+
+        result = process_listing(self.root, self.import_id, FakeModel(proposal))
+
+        self.assertFalse(result["valid"])
+        self.assertEqual("review_required", result["status"])
+        self.assertTrue(any("year" in error for error in result["errors"]))
+
+    def test_confirmed_missing_year_revalidates_without_changing_source(self) -> None:
+        original = (
+            "Caçamba basculante Rossetti 20m3, valor 50.000,00. "
+            "Fone (00) 00000-0000."
+        )
+        (self.package / "mensagem-original.txt").write_text(
+            original,
+            encoding="utf-8",
+        )
+        (self.package / "review-overrides.json").write_text(
+            json.dumps(
+                {
+                    "confirmed_by": "user",
+                    "confirmed_at": "2026-08-04T14:00:00Z",
+                    "field_answers": {"year": 2018},
+                }
+            ),
+            encoding="utf-8",
+        )
+        proposal = self.valid_result()
+        proposal.update(
+            {
+                "title": "Caçamba Basculante Rossetti 20m3",
+                "year": None,
+                "price_in_cents": 5000000,
+                "description": "Completa, com pistão frontal.",
+                "type": "Confirmar com o vendedor",
+                "seller_confirmation_required": True,
+                "missing_fields": ["year"],
+            }
+        )
+        model = FakeModel(proposal)
+
+        result = process_listing(self.root, self.import_id, model)
+
+        self.assertTrue(result["valid"])
+        self.assertIn("Ano: 2018 (confirmado pelo usuário)", model.last_text)
+        extracted = json.loads((self.package / "anuncio-extraido.json").read_text())
+        self.assertEqual(2018, extracted["year"])
+        self.assertIn("2018", extracted["title"])
+        self.assertEqual([], extracted["missing_fields"])
+        self.assertEqual(
+            original,
+            (self.package / "mensagem-original.txt").read_text(),
+        )
+
     def test_review_correction_requires_exactly_one_source_match(self) -> None:
         with self.assertRaisesRegex(Exception, "exatamente uma vez"):
             apply_review_corrections(

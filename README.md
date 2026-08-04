@@ -4,7 +4,7 @@ An event-driven automation pipeline that turns sequences of WhatsApp text and
 images into structured listings while keeping a human in control of every
 publication.
 
-![Event-driven pipeline architecture](docs/assets/architecture-pipeline.png)
+![Event-driven pipeline architecture](docs/assets/architecture-pipeline-v2.png)
 
 > AI proposes. Deterministic rules validate. A human approves.
 
@@ -189,6 +189,15 @@ The initial filter uses `item_keywords` from `config/settings.local.json`:
 Keywords must match the language used in the source group. Add them
 conservatively: generic terms increase the risk of turning ordinary
 conversations into listing candidates.
+
+### Recovering a missing year
+
+A text without a year is accepted only when it contains both an explicit
+`price/value` signal and an explicit `phone/contact` signal. The pipeline keeps
+the candidate and its subsequent images, but deterministic validation blocks
+publication and asks for the year in the private approval chat. Capacity,
+volume, mileage, operating hours, and model numbers are never inferred as a
+year.
 
 ### Visual validation
 
@@ -395,7 +404,7 @@ node --check openclaw/plugins/whatsapp-marketplace-importer/index.js
 git diff --check
 ```
 
-The current checkpoint contains 124 unit, integration, regression, and security
+The current checkpoint contains 128 unit, integration, regression, and security
 tests.
 
 ## Project structure

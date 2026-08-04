@@ -166,12 +166,16 @@ def _listing_text_key(chat_id: str, text: str, received_at: str) -> str:
 def _candidate_text(text: str, keywords: list[str]) -> tuple[bool, str]:
     if not text or MEDIA_PLACEHOLDER_RE.match(text.strip()):
         return False, "mensagem sem texto de anúncio"
-    if not YEAR_RE.search(text) and not SHORT_YEAR_RE.search(text):
-        return False, "texto não contém ano"
+    has_year = bool(YEAR_RE.search(text) or SHORT_YEAR_RE.search(text))
+    has_strong_sale_signals = bool(
+        PRICE_SIGNAL_RE.search(text) and CONTACT_SIGNAL_RE.search(text)
+    )
+    if not has_year and not has_strong_sale_signals:
+        return False, "texto não contém ano nem sinais comerciais fortes"
     searchable = _plain(text)
     if any(_plain(keyword) in searchable for keyword in keywords):
         return True, ""
-    if PRICE_SIGNAL_RE.search(text) and CONTACT_SIGNAL_RE.search(text):
+    if has_strong_sale_signals:
         return True, ""
     return False, "texto não contém tipo reconhecível nem sinais fortes de anúncio"
 

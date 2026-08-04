@@ -312,6 +312,42 @@ class IngestTest(unittest.TestCase):
         self.assertEqual("invalid_text_ignored", no_year["action"])
         self.assertFalse((self.root / "anuncios" / "pendentes").exists())
 
+    def test_strong_listing_without_year_keeps_its_thirteen_images(self) -> None:
+        self.enable_group_intake(shadow_mode=False)
+        text = (
+            "Caçamba basculante meia cana Rossetti 20m3, completa, pistão "
+            "frontal, chapa de aço reforçada, valor 50.000,00 cada, várias "
+            "unidades, também de 14 e 16m3. Fone (00) 00000-0000."
+        )
+
+        created = ingest_event(
+            self.root,
+            self.group_event("missing-year-text", text=text),
+        )
+        attached_ids = []
+        for index in range(1, 14):
+            image = self.image(f"missing-year-{index}.jpg", f"image-{index}".encode())
+            attached = ingest_event(
+                self.root,
+                self.group_event(
+                    f"missing-year-image-{index}",
+                    text="<media:image>",
+                    media_paths=[str(image)],
+                    media_types=["image/jpeg"],
+                ),
+            )
+            attached_ids.append(attached.get("import_id"))
+
+        self.assertEqual("candidate_created", created["action"])
+        self.assertEqual(
+            [created["import_id"]] * 13,
+            attached_ids,
+        )
+        package = self.package(str(created["import_id"]))
+        metadata = json.loads((package / "metadata.json").read_text())
+        self.assertEqual(13, metadata["media_count"])
+        self.assertEqual(text, (package / "mensagem-original.txt").read_text())
+
     def test_two_digit_year_after_ano_creates_candidate(self) -> None:
         result = ingest_event(
             self.root,
