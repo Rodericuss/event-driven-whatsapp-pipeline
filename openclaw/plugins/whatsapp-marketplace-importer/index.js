@@ -88,6 +88,7 @@ let whatsappRuntimePromise;
 const completionWatchers = new Set();
 const processingAcknowledged = new Set();
 const processingTimers = new Map();
+const activeProcessingWorkers = new Set();
 const orphanFeedbackBatches = new Map();
 const clarificationQuestionDispatches = new Set();
 const actionButtonTests = new Map();
@@ -98,6 +99,14 @@ const ACTION_BUTTON_TEST_TTL_MS = 10 * 60 * 1000;
 const APPROVAL_REACTION_PREFIX = "ROMILDO_APPROVAL_REACTION:";
 const APPROVAL_REACTION_TEST_TTL_MS = 10 * 60 * 1000;
 const BATCH_STABILITY_MS = 8_000;
+
+export function shouldWaitForProcessing(status, processingPending) {
+  return (
+    status?.status === "review_required" &&
+    status?.automation_failed !== true &&
+    processingPending === true
+  );
+}
 
 async function loadWhatsAppRuntime() {
   if (!whatsappRuntimePromise) {
@@ -690,13 +699,16 @@ function enqueueProcessing(projectRoot, importId, delayMs = 15000) {
   access(workerPath).catch(() => {});
   const timer = setTimeout(() => {
     processingTimers.delete(importId);
+    activeProcessingWorkers.add(importId);
     const worker = spawn(workerPath, [importId], {
       cwd: projectRoot,
       env: { ...process.env, IMPORTER_ROOT: projectRoot, DRY_RUN: "false" },
       detached: true,
       stdio: "ignore",
     });
-    worker.on("error", () => {});
+    const finished = () => activeProcessingWorkers.delete(importId);
+    worker.once("error", finished);
+    worker.once("exit", finished);
     worker.unref();
   }, delayMs);
   timer.unref?.();
@@ -726,6 +738,11 @@ function watchForCompletion(api, projectRoot, importId, chatId) {
           clarification,
           chatId,
         );
+        return;
+      }
+      const processingPending =
+        processingTimers.has(importId) || activeProcessingWorkers.has(importId);
+      if (shouldWaitForProcessing(status, processingPending)) {
         return;
       }
       if (status.status === "review_required" || status.automation_failed === true) {

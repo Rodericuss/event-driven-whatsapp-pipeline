@@ -249,6 +249,18 @@ class OpenClawPluginTests(unittest.TestCase):
                 allowedChats,
                 groupIntake,
               ),
+              transientReviewWaits: loadedPlugin.shouldWaitForProcessing(
+                { status: "review_required", automation_failed: false },
+                true,
+              ),
+              terminalReviewDoesNotWait: loadedPlugin.shouldWaitForProcessing(
+                { status: "review_required", automation_failed: false },
+                false,
+              ),
+              failedAutomationDoesNotWait: loadedPlugin.shouldWaitForProcessing(
+                { status: "review_required", automation_failed: true },
+                true,
+              ),
               capturedReaction,
               capturedPayload,
               capturedGroupPayload,
@@ -340,6 +352,9 @@ class OpenClawPluginTests(unittest.TestCase):
             "/api/romildonegocios/whatsapp/approval-reaction-test",
             result["routePaths"],
         )
+        self.assertTrue(result["transientReviewWaits"])
+        self.assertFalse(result["terminalReviewDoesNotWait"])
+        self.assertFalse(result["failedAutomationDoesNotWait"])
 
     def test_action_button_callbacks_are_strictly_parsed(self) -> None:
         result = self.run_plugin_probe()
