@@ -145,7 +145,10 @@ class ClarificationTest(unittest.TestCase):
         )
         (self.package / "anuncio-extraido.json").write_text(json.dumps(listing))
         status = json.loads((self.package / "status.json").read_text())
-        status["errors"] = ["year está ausente no texto original."]
+        status["errors"] = [
+            "description ainda contém preço.",
+            "year está ausente no texto original.",
+        ]
         (self.package / "status.json").write_text(json.dumps(status))
 
         clarification = prepare_clarification(self.root, IMPORT_ID)

@@ -256,6 +256,19 @@ def _field_from_errors(
     return None
 
 
+def _field_for_clarification(
+    status: dict[str, Any],
+    listing: dict[str, Any],
+    excluded: set[str] | None = None,
+) -> str | None:
+    declared_missing = listing.get("missing_fields")
+    if isinstance(declared_missing, list):
+        for field in SUPPORTED_FIELDS:
+            if field in declared_missing and field not in (excluded or set()):
+                return field
+    return _field_from_errors(status, excluded)
+
+
 def _question_for(
     import_id: str, field: str, suggestion: Any, listing: dict[str, Any]
 ) -> str:
@@ -304,11 +317,11 @@ def prepare_clarification(root: Path, import_id: str) -> dict[str, Any] | None:
         if isinstance(overrides, dict)
         else []
     )
-    field = _field_from_errors(status, confirmed_fields)
+    listing = _load_json(package / "anuncio-extraido.json", {})
+    field = _field_for_clarification(status, listing, confirmed_fields)
     if field not in SUPPORTED_FIELDS:
         return None
 
-    listing = _load_json(package / "anuncio-extraido.json", {})
     metadata = _load_json(package / "metadata.json", {})
     approval_chat_id = _digits(
         metadata.get("approval_chat_id") or metadata.get("chat_id")
