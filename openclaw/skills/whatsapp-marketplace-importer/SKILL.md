@@ -1,6 +1,6 @@
 ---
 name: whatsapp-marketplace-importer
-description: Captura anúncios de um grupo autorizado ou do WhatsApp pessoal, valida o texto e publica somente após aprovação no chat pessoal.
+description: Captura anúncios de um grupo autorizado ou do WhatsApp pessoal, valida o texto e publica automaticamente quando os dados estão claros.
 ---
 
 # WhatsApp Marketplace Importer
@@ -31,8 +31,8 @@ WhatsApp pessoal parecer um anúncio de máquina, veículo, equipamento ou imple
 - Informe no chat pessoal os motivos de rejeição, revisão ou falha operacional.
 - Erros determinísticos solucionáveis exigem uma resposta auditada no chat;
   alertas visuais não bloqueiam o fluxo.
-- Não publique até receber 👍 no cartão pessoal ou a contingência literal
-  `PUBLICAR <código>` para o pacote validado.
+- Publique automaticamente o pacote validado quando não houver dúvida
+  determinística. Não peça confirmação adicional de publicação.
 
 ## Fluxo
 
@@ -54,8 +54,8 @@ WhatsApp pessoal parecer um anúncio de máquina, veículo, equipamento ou imple
    `review_required`.
 10. A análise visual síncrona fica desabilitada no fluxo operacional; fotos não
     são excluídas por decisão do modelo.
-11. Um pacote validado para em `awaiting_publication_confirmation`; o cartão vai
-    ao privado e somente 👍 ou `PUBLICAR <código>` libera o envio autorizado.
+11. Um pacote validado sem dúvidas segue automaticamente para o envio
+    autorizado; o modo-sombra continua usando cartão e reação para não publicar.
 12. O worker ignora o site e publica o álbum sanitizado sem URL somente no grupo
     de saída configurado.
 13. O envio registra o `message_id`, o JID e o nome literal do grupo.

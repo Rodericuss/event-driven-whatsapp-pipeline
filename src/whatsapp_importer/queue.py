@@ -45,11 +45,15 @@ def publication_lock(root: Path):
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def approved_for_live(status: dict[str, Any]) -> bool:
+def approved_for_live(status: dict[str, Any], *, shadow_mode: bool = False) -> bool:
+    """Allow validated listings to continue, except while running a shadow test."""
     return (
         status.get("status") == "ready_for_review"
         and status.get("validated") is True
-        and status.get("publication_confirmed") is True
+        and (
+            not shadow_mode
+            or status.get("publication_confirmed") is True
+        )
     )
 
 

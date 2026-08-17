@@ -721,10 +721,7 @@ function watchForCompletion(api, projectRoot, importId, chatId) {
   const timer = setInterval(async () => {
     try {
       const status = JSON.parse(await (await import("node:fs/promises")).readFile(path.join(projectRoot, "anuncios", "pendentes", importId, "status.json"), "utf8"));
-      if (
-        status.status === "awaiting_clarification" ||
-        status.status === "awaiting_publication_confirmation"
-      ) {
+      if (status.status === "awaiting_clarification") {
         clearInterval(timer); completionWatchers.delete(importId);
         const clarification = JSON.parse(
           await (await import("node:fs/promises")).readFile(
@@ -738,6 +735,21 @@ function watchForCompletion(api, projectRoot, importId, chatId) {
           clarification,
           chatId,
         );
+        return;
+      }
+      if (status.status === "awaiting_publication_confirmation") {
+        const clarification = JSON.parse(
+          await (await import("node:fs/promises")).readFile(
+            path.join(projectRoot, "anuncios", "pendentes", importId, "clarification.json"),
+            "utf8",
+          ),
+        );
+        if (clarification.shadow_mode === true) {
+          clearInterval(timer); completionWatchers.delete(importId);
+          await sendClarificationQuestion(api, projectRoot, clarification, chatId);
+          return;
+        }
+        enqueueProcessing(projectRoot, importId, 0);
         return;
       }
       const processingPending =
@@ -832,7 +844,7 @@ async function handleFlushedBatch(api, projectRoot, response, fallbackChatId) {
       await sendPersonalText(
         api,
         chatId,
-        `Recebi e separei ${readyImportIds.size} candidato${readyImportIds.size === 1 ? "" : "s"}. Vou validar cada um e enviarei os cartões de aprovação individualmente.`,
+        `Recebi e separei ${readyImportIds.size} candidato${readyImportIds.size === 1 ? "" : "s"}. Vou validar cada um e publicar automaticamente quando os dados estiverem claros.`,
       );
     }
     if (skippedMedia > 0) {

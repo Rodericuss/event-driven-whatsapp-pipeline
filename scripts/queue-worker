@@ -77,13 +77,26 @@ proxy = None
 mark(root, import_id, "running")
 try:
     current = json.loads(status_path.read_text())
+    metadata = json.loads(
+        (root / "anuncios" / "pendentes" / import_id / "metadata.json").read_text()
+    )
+    shadow_mode = metadata.get("intake_shadow_mode") is True
     if current.get("status") in {
         "awaiting_clarification",
-        "awaiting_publication_confirmation",
         "cancelled_by_user",
     }:
         mark(root, import_id, "done")
         raise SystemExit(0)
+    if current.get("status") == "awaiting_publication_confirmation":
+        if shadow_mode:
+            mark(root, import_id, "done")
+            raise SystemExit(0)
+        current["status"] = "ready_for_review"
+        current["publication_confirmation_bypassed"] = True
+        current["publication_confirmation_bypassed_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+        )
+        status_path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n")
     if current.get("status") != "ready_for_review":
         process_listing(root, import_id)
     status = json.loads(status_path.read_text())
@@ -98,12 +111,13 @@ try:
     ):
         process_listing(root, import_id)
         status = json.loads(status_path.read_text())
-    if not approved_for_live(status):
+    if not approved_for_live(status, shadow_mode=shadow_mode):
         if status.get("status") == "review_required":
             prepare_clarification(root, import_id)
         elif (
             status.get("status") == "ready_for_review"
             and status.get("validated") is True
+            and shadow_mode
         ):
             prepare_publication_confirmation(root, import_id)
         mark(root, import_id, "done")

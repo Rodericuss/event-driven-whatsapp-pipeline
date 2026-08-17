@@ -22,11 +22,12 @@ awaiting_clarification
   └─ CANCELAR <código> → cancelled_by_user
 
 ready_for_review
-  → awaiting_publication_confirmation
+  → publicação automática quando não estiver em modo-sombra
+  → awaiting_publication_confirmation somente no modo-sombra
 
-awaiting_publication_confirmation
-  ├─ PUBLICAR <código> → cadastro e publicação autorizados
-  └─ CANCELAR <código> → cancelled_by_user
+awaiting_publication_confirmation (modo-sombra)
+  ├─ 👍 → registro do teste, sem publicação
+  └─ 👎 → cancelled_by_user
 ```
 
 O WhatsApp atual entrega cada foto do álbum como evento separado. A janela de
@@ -103,9 +104,8 @@ marketplace_validated
   → publication continua separada
 ```
 
-Antes de qualquer escrita, o chat pessoal recebe um resumo e exige
-`PUBLICAR <código>`. Só então o worker chama o comando real com uma chave
-contextual interna:
+Quando a validação termina sem dúvidas, o worker chama o comando real com uma
+chave contextual interna, sem pedir confirmação adicional:
 
 ```bash
 scripts/execute-marketplace-import \
@@ -121,7 +121,7 @@ as imagens.
 ## Publicação aprovada no grupo autorizado
 
 ```text
-pacote validado e aprovado no chat pessoal
+pacote validado sem dúvidas
   → álbum pending/sending/sent
   → group_published
 ```

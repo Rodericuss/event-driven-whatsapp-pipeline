@@ -33,7 +33,7 @@ class QueueSafetyTest(unittest.TestCase):
         self.assertNotIn("INTERNAL_IMPORT_WRITES_ENABLED", worker)
         self.assertNotIn('"secrets", "set"', worker)
         self.assertIn('"awaiting_clarification"', worker)
-        self.assertIn('"awaiting_publication_confirmation"', worker)
+        self.assertIn('"publication_confirmation_bypassed"', worker)
 
     def test_publication_lock_can_be_reentered_sequentially(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -65,7 +65,7 @@ class QueueSafetyTest(unittest.TestCase):
             )
         )
 
-    def test_live_flow_requires_explicit_publication_confirmation(self) -> None:
+    def test_live_flow_auto_approves_validated_listing(self) -> None:
         self.assertFalse(approved_for_live({"status": "ready_for_review"}))
         self.assertFalse(
             approved_for_live(
@@ -75,12 +75,21 @@ class QueueSafetyTest(unittest.TestCase):
                 }
             )
         )
-        self.assertFalse(
+        self.assertTrue(
             approved_for_live(
                 {
                     "status": "ready_for_review",
                     "validated": True,
                 }
+            )
+        )
+        self.assertFalse(
+            approved_for_live(
+                {
+                    "status": "ready_for_review",
+                    "validated": True,
+                },
+                shadow_mode=True,
             )
         )
         self.assertTrue(
